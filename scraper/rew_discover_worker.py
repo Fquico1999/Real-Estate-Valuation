@@ -40,19 +40,6 @@ async def discover_once() -> int:
     listing_urls = set()
     max_pages = 5
 
-    schema = {
-        "name": "Property Listings",
-        "baseSelector": "article.displaycard, article.marqueepanel",
-        "fields": [
-            {
-                "name": "path",
-                "selector": "a.displaycard-link, a.marqueepanel-link",
-                "type": "attribute",
-                "attribute": "href",
-            },
-        ],
-    }
-
     async with AsyncWebCrawler(config=browser_config) as crawler:
         for page in range(1, max_pages + 1):
             url = f"{BASE_URL}/properties/areas/vancouver-bc/sort/latest"
