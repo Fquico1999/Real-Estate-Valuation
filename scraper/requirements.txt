@@ -1,0 +1,6 @@
+crawl4ai
+sqlalchemy[asyncio]
+asyncpg
+psycopg2-binary
+python-dotenv
+beautifulsoup4

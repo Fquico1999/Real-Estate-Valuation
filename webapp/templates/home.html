@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>REW Listings - Dashboard</title>
+</head>
+<body>
+  <h1>REW Listings - Dashboard</h1>
+
+  <h2>Listings DB</h2>
+  <p>Total listings in DB: <strong>{{ total }}</strong></p>
+
+  <h2>URL Queue</h2>
+    <ul>
+    <li>Total URLs discovered: <strong>{{ total_urls }}</strong></li>
+    <li>Done (scraped): <strong>{{ done_urls }}</strong></li>
+    <li>Pending (incl. scraping): <strong>{{ pending_urls }}</strong></li>
+    <li>Errors: <strong>{{ error_urls }}</strong></li>
+    <li>
+        Scraped ratio:
+        <strong>
+        {% if total_urls > 0 %}
+            {{ '%.1f' % (scrape_ratio * 100) }}%
+        {% else %}
+            N/A
+        {% endif %}
+        </strong>
+    </li>
+    <li>
+        Latest discovered URL:
+        {% if latest_discovered %}
+        <a href="{{ latest_discovered.url }}" target="_blank">
+            {{ latest_discovered.url }}
+        </a>
+        ({{ latest_discovered.discovered_at }})
+        {% else %}
+        None yet
+        {% endif %}
+    </li>
+    <li>
+        Latest successfully scraped URL:
+        {% if latest_done %}
+        <a href="{{ latest_done.url }}" target="_blank">
+            {{ latest_done.url }}
+        </a>
+        (last attempt: {{ latest_done.last_attempt_at }})
+        {% else %}
+        None yet
+        {% endif %}
+    </li>
+    </ul>
+
+
+  <h2>Latest scraped listings</h2>
+<table border="1" cellpadding="4">
+    <tr>
+      <th>Scraped At</th>
+      <th>Address</th>
+      <th>Neighbourhood</th>
+      <th>City</th>
+      <th>Price</th>
+      <th>Beds</th>
+      <th>Baths</th>
+    </tr>
+    {% for l in latest %}
+    <tr>
+      <td>{{ l.scraped_at }}</td>
+      <td><a href="{{ l.rew_url }}" target="_blank">{{ l.street_address }}</a></td>
+      <td>{{ l.neighbourhood }}</td>
+      <td>{{ l.city }}</td>
+      <td>
+        {% if l.price_cad %}
+          {{ '{:,}'.format(l.price_cad) }}
+        {% else %}
+          -
+        {% endif %}
+      </td>
+      <td>{{ l.beds }}</td>
+      <td>{{ l.baths }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+
+  <p><a href="/listings">Browse all listings</a></p>
+</body>
+</html>

@@ -1,0 +1,2 @@
+-- Placeholder for future DB initialization (extensions, seed data, etc.)
+-- For now, SQLAlchemy will create the tables.

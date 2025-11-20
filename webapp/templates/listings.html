@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Browse Listings</title>
+</head>
+<body>
+  <h1>Browse Listings</h1>
+
+  <table border="1" cellpadding="4">
+    <tr>
+      <th>Price</th>
+      <th>Address</th>
+      <th>Neighbourhood</th>
+      <th>City</th>
+      <th>Beds</th>
+      <th>Baths</th>
+      <th>Sqft</th>
+      <th>Scraped</th>
+    </tr>
+    {% for l in listings %}
+    <tr>
+      <td>
+        {% if l.price_cad %}
+          {{ '{:,}'.format(l.price_cad) }}
+        {% else %}
+          -
+        {% endif %}
+      </td>
+      <td><a href="{{ l.rew_url }}" target="_blank">{{ l.street_address }}</a></td>
+      <td>{{ l.neighbourhood }}</td>
+      <td>{{ l.city }}</td>
+      <td>{{ l.beds }}</td>
+      <td>{{ l.baths }}</td>
+      <td>{{ l.sqft }}</td>
+      <td>{{ l.scraped_at }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+
+  <p>
+    Page {{ page }} / {{ total_pages }}
+    {% if page > 1 %}
+      <a href="/listings?page={{ page - 1 }}">Prev</a>
+    {% endif %}
+    {% if page < total_pages %}
+      <a href="/listings?page={{ page + 1 }}">Next</a>
+    {% endif %}
+  </p>
+
+  <p><a href="/">Back to dashboard</a></p>
+</body>
+</html>
