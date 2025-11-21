@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Listings Map</title>
+
+  <!-- Leaflet CSS -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      margin: 0;
+      padding: 0;
+    }
+    .top-bar {
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid #ddd;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .top-bar a {
+      text-decoration: none;
+      color: #0070f3;
+    }
+    #map {
+      height: calc(100vh - 48px); /* full height minus top bar */
+      width: 100%;
+    }
+  </style>
+</head>
+<body>
+  <div class="top-bar">
+    <div>
+      <strong>Listings Map</strong>
+    </div>
+    <div>
+      <a href="{{ request.url_for('listings') }}">← Back to list</a>
+      &nbsp;|&nbsp;
+      <a href="{{ request.url_for('home') }}">Dashboard</a>
+    </div>
+  </div>
+
+  <div id="map"></div>
+
+  <!-- Leaflet JS -->
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+
+  <script>
+    // Data from backend
+    const listingPoints = {{ listing_points | tojson }};
+
+    // Default center (Vancouver-ish) if no data:
+    let defaultCenter = [49.2827, -123.1207];
+    if (listingPoints.length > 0) {
+      // Start at the first listing; we'll also fit bounds below
+      defaultCenter = [listingPoints[0].lat, listingPoints[0].lng];
+    }
+
+    // Initialize map
+    const map = L.map("map").setView(defaultCenter, 12);
+
+    // Base tile layer from OpenStreetMap
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+
+    const markers = [];
+
+    listingPoints.forEach((item) => {
+      if (item.lat == null || item.lng == null) return;
+
+      const price = item.price
+        ? "$" + item.price.toLocaleString()
+        : "Price unknown";
+
+      const popupHtml = `
+        <div>
+            <strong>${price}</strong><br/>
+            ${item.address ? item.address : "No address"}<br/>
+            ${item.city || ""} ${item.neighbourhood || ""}<br/>
+            ${item.url ? `<a href="${item.url}" target="_blank" rel="noopener noreferrer">View on REW</a>` : ""}
+            <br/>
+            ${item.detail_url ? `<a href="${item.detail_url}">View details</a>` : ""}
+        </div>
+        `;
+
+      const marker = L.marker([item.lat, item.lng])
+        .addTo(map)
+        .bindPopup(popupHtml);
+
+      markers.push(marker);
+    });
+
+    if (markers.length > 0) {
+      const group = L.featureGroup(markers);
+      map.fitBounds(group.getBounds().pad(0.2));
+    }
+  </script>
+</body>
+</html>
