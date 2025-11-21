@@ -1,5 +1,6 @@
 # scraper/rew_discover_worker.py
 import asyncio
+import random
 from datetime import datetime
 
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode
@@ -12,6 +13,7 @@ from url_queue import enqueue_urls  # helper that inserts into rew_listing_urls
 BASE_URL = "https://www.rew.ca"
 DISCOVERY_INTERVAL_SECONDS = 60 #* 60  # 1 hour
 PAGE_LOAD_TIMEOUT_SECONDS = 60  # Safety timeout per page
+PER_PAGE_SLEEP_SECONDS = 1 # To prevent rate limiting
 
 async def discover_once() -> int:
     """
@@ -81,6 +83,8 @@ async def discover_once() -> int:
 
             print(f"  -> found {len(page_urls)} listing URLs on this page")
             listing_urls.update(page_urls)
+            # Sleep before scraping next page
+            await asyncio.sleep(PER_PAGE_SLEEP_SECONDS + random.uniform(0, 1))
 
     # enqueue into DB with dedicated session block
     inserted = 0

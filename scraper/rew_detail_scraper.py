@@ -1,6 +1,7 @@
 # scraper/rew_detail_scraper.py
 import asyncio
 import os
+import random
 
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode
 from sqlalchemy import select
@@ -67,7 +68,7 @@ def validate_listing_data(data: dict) -> None:
 async def scrape_listing_detail(crawler: AsyncWebCrawler, session, url: str):
     run_conf = CrawlerRunConfig(cache_mode=CacheMode.BYPASS)
 
-    print(f"Scraping {url}")
+    print(f"[SCRAPER] Scraping {url}")
     result = await asyncio.wait_for(
             crawler.arun(url=url, config=run_conf),
             timeout=PAGE_LOAD_TIMEOUT_SECONDS
@@ -77,7 +78,7 @@ async def scrape_listing_detail(crawler: AsyncWebCrawler, session, url: str):
     # adjust to result.html / result.content if needed.
     html = getattr(result, "html", None) or getattr(result, "content", None)
     if not html:
-        print(f"No HTML for {url}")
+        print(f"[SCRAPER] No HTML for {url}")
         return
 
     data = parse_rew_listing(html, url)
@@ -88,7 +89,7 @@ async def scrape_listing_detail(crawler: AsyncWebCrawler, session, url: str):
     validate_listing_data(data)
 
     await upsert_listing(session, data)
-    print(f"Upserted listing {data.get('mls_number')} from {url}")
+    print(f"[SCRAPER] Upserted listing {data.get('mls_number')} from {url}")
 
 
 async def main():
@@ -113,26 +114,24 @@ async def main():
         while True:
             # Create new session every batch to prevent stale connections
             async with AsyncSessionLocal() as session:
-                print(f"Starting new batch...")
+                print(f"[SCRAPER] Starting new batch...")
                 batch = await dequeue_next_batch(session, batch_size=5)
 
                 if not batch:
-                    print(f"No pending URLs. Sleeping for {EMPTY_QUEUE_SLEEP_SECONDS} seconds...")
+                    print(f"[SCRAPER] No pending URLs. Sleeping for {EMPTY_QUEUE_SLEEP_SECONDS} seconds...")
                     await asyncio.sleep(EMPTY_QUEUE_SLEEP_SECONDS)
                     continue
 
                 for url_id, url in batch:
-                    print(f"Scraping {url}")
-
                     try:
                         await scrape_listing_detail(crawler, session, url)
                         await mark_done(session, url_id)
-                        print(f"Finished scraping... Sleeping for {PER_URL_SLEEP_SECONDS} seconds.")
-                        await asyncio.sleep(PER_URL_SLEEP_SECONDS)
                     except Exception as e:
                         # Also includes validation failures
                         await mark_failed(session, url_id, str(e))
-                        print(f"Failed: {url} ({e})")
+                        print(f"[SCRAPER] Failed: {url} ({e})")
+                    print(f"[SCRAPER] Finished scraping... Sleeping for {PER_URL_SLEEP_SECONDS} seconds.")
+                    await asyncio.sleep(PER_URL_SLEEP_SECONDS + random.uniform(0, 1))
 
 
 if __name__ == "__main__":
