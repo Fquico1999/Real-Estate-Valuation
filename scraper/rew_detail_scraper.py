@@ -97,7 +97,8 @@ async def main():
 
     # Configure browser ONCE
     browser_conf = BrowserConfig( 
-        headless=True, 
+        headless=True,
+        enable_stealth=True, 
         verbose=True, 
         extra_args=[
             "--no-sandbox", 

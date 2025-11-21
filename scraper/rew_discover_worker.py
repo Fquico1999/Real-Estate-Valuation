@@ -24,6 +24,7 @@ async def discover_once() -> int:
     # Config: Run headless, disable cache to ensure we get fresh listings
     browser_config = BrowserConfig(
         headless=True, 
+        enable_stealth=True,
         verbose=True, # Set to False in production to reduce noise
         extra_args=[
             "--no-sandbox", 
