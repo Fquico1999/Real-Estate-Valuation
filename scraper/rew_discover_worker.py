@@ -10,7 +10,7 @@ from models import AsyncSessionLocal, init_db
 from url_queue import enqueue_urls  # helper that inserts into rew_listing_urls
 
 BASE_URL = "https://www.rew.ca"
-DISCOVERY_INTERVAL_SECONDS = 60 * 60  # 1 hour
+DISCOVERY_INTERVAL_SECONDS = 60 #* 60  # 1 hour
 PAGE_LOAD_TIMEOUT_SECONDS = 60  # Safety timeout per page
 
 async def discover_once() -> int:
@@ -49,7 +49,10 @@ async def discover_once() -> int:
             print(f"[DISCOVER] Fetching {url}")
 
             try:
-                result = await crawler.arun(url=url, config=run_config)
+                result = await asyncio.wait_for(
+                    crawler.arun(url=url, config=run_config), 
+                    timeout=PAGE_LOAD_TIMEOUT_SECONDS
+                )
             except asyncio.TimeoutError:
                 print(f"[ERROR] Timeout while fetching {url} - skipping page.")
                 continue

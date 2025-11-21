@@ -11,6 +11,7 @@ from url_queue import dequeue_next_batch, mark_done, mark_failed
 
 EMPTY_QUEUE_SLEEP_SECONDS = 60  # how long to sleep when no URLs are pending
 PER_URL_SLEEP_SECONDS = 1 # How long to pause for after processing a URL
+PAGE_LOAD_TIMEOUT_SECONDS = 60  # Safety timeout per page
 
 async def upsert_listing(session, data: dict):
     rew_url = data.get("rew_url")
@@ -35,7 +36,10 @@ async def scrape_listing_detail(crawler: AsyncWebCrawler, session, url: str):
     run_conf = CrawlerRunConfig(cache_mode=CacheMode.BYPASS)
 
     print(f"Scraping {url}")
-    result = await crawler.arun(url=url, config=run_conf)
+    result = await asyncio.wait_for(
+            crawler.arun(url=url, config=run_conf),
+            timeout=PAGE_LOAD_TIMEOUT_SECONDS
+        )
 
     # depending on crawl4ai version, this attribute might differ;
     # adjust to result.html / result.content if needed.
@@ -51,6 +55,7 @@ async def scrape_listing_detail(crawler: AsyncWebCrawler, session, url: str):
 
 async def main():
     await init_db()
+    print("[SCRAPER] DB init complete")
 
     # Configure browser ONCE
     browser_conf = BrowserConfig( 
@@ -63,7 +68,9 @@ async def main():
         ])
 
     # Long-running worker loop
+    print("[SCRAPER] Creating AsyncWebCrawler...")
     async with AsyncWebCrawler(config=browser_conf) as crawler:
+        print("[SCRAPER] Crawler ready, entering main loop")
         while True:
             # Create new session every batch to prevent stale connections
             async with AsyncSessionLocal() as session:
