@@ -4,6 +4,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from models import RewListingUrl
 
+MAX_SCRAPE_ATTEMPTS = 5
 
 async def enqueue_urls(urls: list[str], session: AsyncSession):
     """Insert new URLs into rew_listing_urls, ignoring duplicates."""
@@ -30,7 +31,11 @@ async def dequeue_next_batch(session: AsyncSession, batch_size=10):
         WITH picked AS (
             SELECT id, url
             FROM rew_listing_urls
-            WHERE status = 'pending'
+            WHERE 
+                (
+                    status = 'pending'
+                    OR (status = 'error' AND attempts < :max_attempts)
+                )
             ORDER BY discovered_at
             LIMIT :batch_size
             FOR UPDATE SKIP LOCKED
@@ -43,7 +48,7 @@ async def dequeue_next_batch(session: AsyncSession, batch_size=10):
         RETURNING id, url;
     """)
 
-    rows = (await session.execute(stmt, {"batch_size": batch_size})).fetchall()
+    rows = (await session.execute(stmt, {"batch_size": batch_size, "max_attempts": MAX_SCRAPE_ATTEMPTS})).fetchall()
     await session.commit()
     return rows
 
