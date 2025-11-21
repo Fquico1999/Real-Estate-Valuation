@@ -31,6 +31,38 @@ async def upsert_listing(session, data: dict):
 
     await session.commit()
 
+def validate_listing_data(data: dict) -> None:
+    """
+    Raises ValueError if the scraped listing doesn't meet the minimum requirements.
+    """
+    missing = []
+
+    rew_url = (data.get("rew_url") or "").strip()
+    if not rew_url:
+        missing.append("rew_url")
+
+    street_address = (data.get("street_address") or "").strip()
+    if not street_address:
+        missing.append("street_address")
+
+    city = (data.get("city") or "").strip()
+    if not city:
+        missing.append("city")
+
+    price = data.get("price_cad")
+    try:
+        # allow numeric-like strings, but enforce > 0
+        if price is None:
+            raise ValueError
+        price_val = int(price)
+        if price_val <= 0:
+            raise ValueError
+        data["price_cad"] = price_val  # normalize
+    except Exception:
+        missing.append("price_cad")
+
+    if missing:
+        raise ValueError(f"Missing or invalid required fields: {', '.join(missing)}")
 
 async def scrape_listing_detail(crawler: AsyncWebCrawler, session, url: str):
     run_conf = CrawlerRunConfig(cache_mode=CacheMode.BYPASS)
@@ -49,6 +81,12 @@ async def scrape_listing_detail(crawler: AsyncWebCrawler, session, url: str):
         return
 
     data = parse_rew_listing(html, url)
+    # Ensure rew_url is set even if parser forgets
+    data.setdefault("rew_url", url)
+
+    # Validate listing
+    validate_listing_data(data)
+
     await upsert_listing(session, data)
     print(f"Upserted listing {data.get('mls_number')} from {url}")
 
@@ -91,6 +129,7 @@ async def main():
                         print(f"Finished scraping... Sleeping for {PER_URL_SLEEP_SECONDS} seconds.")
                         await asyncio.sleep(PER_URL_SLEEP_SECONDS)
                     except Exception as e:
+                        # Also includes validation failures
                         await mark_failed(session, url_id, str(e))
                         print(f"Failed: {url} ({e})")
 
