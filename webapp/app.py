@@ -1,5 +1,6 @@
 # webapp/app.py
 import os
+import json 
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse
@@ -141,3 +142,40 @@ async def listing_detail(request: Request, listing_id: int):
             "listing": listing,
         },
     )
+
+@app.get("/map", response_class=HTMLResponse)
+async def map_view(request: Request):
+    async with AsyncSessionLocal() as session:
+        stmt = (
+            select(RewListing)
+            .where(RewListing.lat.isnot(None), RewListing.lng.isnot(None))
+            .order_by(RewListing.scraped_at.desc())
+            .limit(500)  # cap to avoid loading thousands at once
+        )
+        rows = (await session.execute(stmt)).scalars().all()
+
+    # Convert to a simple list of dicts for JSON use in the template
+    listing_points = [
+        {
+            "id": l.id,
+            "lat": l.lat,
+            "lng": l.lng,
+            "price": l.price_cad,
+            "address": l.street_address,
+            "city": l.city,
+            "neighbourhood": l.neighbourhood,
+            "url": l.rew_url,
+            "detail_url": str(request.url_for("listing_detail", listing_id=l.id))
+        }
+        for l in rows
+        if l.lat is not None and l.lng is not None
+    ]
+
+    return templates.TemplateResponse(
+        "map.html",
+        {
+            "request": request,
+            "listing_points": listing_points,
+        },
+    )
+

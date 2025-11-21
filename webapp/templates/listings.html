@@ -51,6 +51,11 @@
     {% endif %}
   </p>
 
-  <p><a href="/">Back to dashboard</a></p>
+  <p>
+    <a href="{{ request.url_for('map_view') }}">View these listings on a map</a>
+    &nbsp;|&nbsp;
+    <a href="{{ request.url_for('home') }}">Back to dashboard</a>
+  </p>
+
 </body>
 </html>

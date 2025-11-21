@@ -80,6 +80,11 @@
     {% endfor %}
   </table>
 
-  <p><a href="/listings">Browse all listings</a></p>
+<p>
+  <a href="{{ request.url_for('listings') }}">Browse listings (table)</a>
+  &nbsp;|&nbsp;
+  <a href="{{ request.url_for('map_view') }}">View listings on map</a>
+</p>
+
 </body>
 </html>
