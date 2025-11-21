@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Listing {{ listing.id }} – Details</title>
+  <style>
+    body { font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif; margin: 2rem; }
+    .container { max-width: 960px; margin: 0 auto; }
+    .back-link { margin-bottom: 1rem; display: inline-block; }
+    dt { font-weight: 600; margin-top: 0.5rem; }
+    dd { margin: 0 0 0.25rem 0; }
+    .section { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid #ddd; }
+    code { font-size: 0.9em; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="{{ request.url_for('listings') }}" class="back-link">&larr; Back to listings</a>
+
+    <h1>
+      {{ listing.street_address or "Listing" }}
+      {% if listing.city %} – {{ listing.city }}{% endif %}
+    </h1>
+    {% if listing.price_cad %}
+      <h2>${{ "{:,}".format(listing.price_cad) }} CAD</h2>
+    {% endif %}
+    {% if listing.property_type_human %}
+      <p><strong>{{ listing.property_type_human }}</strong></p>
+    {% endif %}
+
+    <div class="section">
+      <h3>Location</h3>
+      <dl>
+        <dt>Street Address</dt><dd>{{ listing.street_address or "—" }}</dd>
+        <dt>City</dt><dd>{{ listing.city or "—" }}</dd>
+        <dt>Neighbourhood</dt><dd>{{ listing.neighbourhood or "—" }}</dd>
+        <dt>Subcity</dt><dd>{{ listing.subcity or "—" }}</dd>
+        <dt>Province</dt><dd>{{ listing.province or "—" }}</dd>
+        <dt>Postal Code</dt><dd>{{ listing.postal_code or "—" }}</dd>
+        <dt>Latitude / Longitude</dt>
+        <dd>
+          {% if listing.lat and listing.lng %}
+            {{ listing.lat }}, {{ listing.lng }}
+          {% else %}
+            —
+          {% endif %}
+        </dd>
+      </dl>
+    </div>
+
+    <div class="section">
+      <h3>Property Info</h3>
+      <dl>
+        <dt>Property Type</dt><dd>{{ listing.property_type or "—" }}</dd>
+        <dt>Building Name</dt><dd>{{ listing.building_name or "—" }}</dd>
+        <dt>Beds</dt><dd>{{ listing.beds if listing.beds is not none else "—" }}</dd>
+        <dt>Baths</dt><dd>{{ listing.baths if listing.baths is not none else "—" }}</dd>
+        <dt>Square Footage</dt><dd>{{ listing.sqft if listing.sqft is not none else "—" }}</dd>
+      </dl>
+    </div>
+
+    <div class="section">
+      <h3>Listing Meta</h3>
+      <dl>
+        <dt>REW URL</dt>
+        <dd>
+          {% if listing.rew_url %}
+            <a href="{{ listing.rew_url }}" target="_blank" rel="noopener noreferrer">{{ listing.rew_url }}</a>
+          {% else %}
+            —
+          {% endif %}
+        </dd>
+        <dt>REW Slug</dt><dd>{{ listing.rew_slug or "—" }}</dd>
+        <dt>REW Listing ID</dt><dd>{{ listing.rew_listing_id or "—" }}</dd>
+        <dt>MLS Number</dt><dd>{{ listing.mls_number or "—" }}</dd>
+        <dt>Board</dt><dd>{{ listing.board or "—" }}</dd>
+        <dt>Source</dt><dd>{{ listing.source or "—" }}</dd>
+        <dt>Section</dt><dd>{{ listing.section or "—" }}</dd>
+        <dt>Office Name</dt><dd>{{ listing.office_name or "—" }}</dd>
+        <dt>Currency</dt><dd>{{ listing.currency or "—" }}</dd>
+        <dt>Days on REW</dt><dd>{{ listing.days_on_rew if listing.days_on_rew is not none else "—" }}</dd>
+        <dt>Views</dt><dd>{{ listing.views if listing.views is not none else "—" }}</dd>
+        <dt>Scraped At</dt><dd>{{ listing.scraped_at or "—" }}</dd>
+      </dl>
+    </div>
+
+    <div class="section">
+      <h3>Raw Blob</h3>
+      {% if listing.raw_blob %}
+        <pre><code>{{ listing.raw_blob | tojson(indent=2) }}</code></pre>
+      {% else %}
+        <p>No raw data stored.</p>
+      {% endif %}
+    </div>
+  </div>
+</body>
+</html>

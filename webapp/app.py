@@ -1,7 +1,7 @@
 # webapp/app.py
 import os
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
@@ -122,5 +122,22 @@ async def listings(request: Request, page: int = 1, page_size: int = 20):
             "listings": rows,
             "page": page,
             "total_pages": total_pages,
+        },
+    )
+
+@app.get("/listings/{listing_id}", response_class=HTMLResponse)
+async def listing_detail(request: Request, listing_id: int):
+    async with AsyncSessionLocal() as session:
+        stmt = select(RewListing).where(RewListing.id == listing_id)
+        listing = (await session.execute(stmt)).scalar_one_or_none()
+
+    if listing is None:
+        raise HTTPException(status_code=404, detail="Listing not found")
+
+    return templates.TemplateResponse(
+        "listing_detail.html",
+        {
+            "request": request,
+            "listing": listing,
         },
     )
