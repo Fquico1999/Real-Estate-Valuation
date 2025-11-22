@@ -1,8 +1,9 @@
 # webapp/app.py
 import os
 import json
+from collections import defaultdict
 
-from typing import Optional
+from typing import Optional, Dict, List, Any
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi import Query
@@ -13,12 +14,15 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import select, func
 
-from models import Base, RewListing, RewListingUrl
+from models import Base, RewListing, RewListingUrl, Sale, Assessment
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
     "postgresql+asyncpg://rewuser:rewpass@db:5432/real_estate",
 )
+
+PREFERRED_ASSESSMENT_SOURCES: List[str] = ["bc_assessment", "rew_graphql"]
+PREFERRED_SALE_SOURCES: List[str] = ["land_title", "mls", "rew_graphql"]
 
 engine = create_async_engine(DATABASE_URL, echo=False, future=True)
 AsyncSessionLocal = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
@@ -37,6 +41,125 @@ def parse_int(value: Optional[str]) -> Optional[int]:
         return int(value)
     except ValueError:
         return None
+
+def _pick_primary_source(source: str, preferred: List[str]) -> int:
+    """Helper to sort sources by preference."""
+    try:
+        return preferred.index(source)
+    except ValueError:
+        return len(preferred)
+
+
+def merge_assessments(assessments: List[Assessment]) -> List[Dict[str, Any]]:
+    """
+    Merge assessments by (property_id, assessment_year), preferring
+    official sources per year and computing % change vs previous year.
+    """
+    by_year: Dict[int, List[Assessment]] = defaultdict(list)
+    for a in assessments:
+        by_year[a.assessment_year].append(a)
+
+    merged_rows: List[Dict[str, Any]] = []
+    for year, rows in by_year.items():
+        rows_sorted = sorted(
+            rows,
+            key=lambda r: _pick_primary_source(r.source, PREFERRED_ASSESSMENT_SOURCES),
+        )
+        primary = rows_sorted[0]
+        merged_rows.append(
+            {
+                "assessment_year": year,
+                "total_assessed_cad": primary.total_assessed_cad,
+                "land_value": primary.land_value,
+                "building_value": primary.building_value,
+                "primary_source": primary.source,
+                "all_sources": [r.source for r in rows],
+                "change_pct": None,  # computed below
+            }
+        )
+
+    # sort by year descending and compute change vs previous year
+    merged_rows.sort(key=lambda r: r["assessment_year"], reverse=True)
+    previous = None
+    for row in merged_rows:
+        if previous is not None and previous["total_assessed_cad"]:
+            delta = row["total_assessed_cad"] - previous["total_assessed_cad"]
+            row["change_pct"] = (delta / previous["total_assessed_cad"]) * 100.0
+        previous = row
+
+    return merged_rows
+
+
+def merge_sales(sales: List[Sale]) -> List[Dict[str, Any]]:
+    """
+    Merge sales by (sale_date, sale_price_cad), preferring more trusted sources
+    for each transaction.
+    """
+    if not sales:
+        return []
+
+    # cluster by exact (date, price) for now
+    clusters: Dict[tuple, List[Sale]] = defaultdict(list)
+    for s in sales:
+        key = (s.sale_date, s.sale_price_cad)
+        clusters[key].append(s)
+
+    merged_rows: List[Dict[str, Any]] = []
+    for (sale_date, sale_price), rows in clusters.items():
+        rows_sorted = sorted(
+            rows,
+            key=lambda r: _pick_primary_source(r.source, PREFERRED_SALE_SOURCES),
+        )
+        primary = rows_sorted[0]
+
+        price_per_sqft = None
+        if primary.sale_price_cad and primary.sqft and primary.sqft > 0:
+            price_per_sqft = primary.sale_price_cad / primary.sqft
+
+        merged_rows.append(
+            {
+                "sale_date": sale_date,
+                "sale_price_cad": sale_price,
+                "price_per_sqft": price_per_sqft,
+                "beds": primary.beds,
+                "baths": primary.baths,
+                "sqft": primary.sqft,
+                "primary_source": primary.source,
+                "all_sources": [r.source for r in rows],
+            }
+        )
+
+    merged_rows.sort(key=lambda r: r["sale_date"], reverse=True)
+    return merged_rows
+
+
+def group_assessments_by_source(assessments: List[Assessment]) -> Dict[str, List[Assessment]]:
+    """
+    Return {source: [Assessment, ...]} sorted by year desc.
+    """
+    by_source: Dict[str, List[Assessment]] = defaultdict(list)
+    for a in assessments:
+        by_source[a.source].append(a)
+
+    for rows in by_source.values():
+        rows.sort(key=lambda a: a.assessment_year, reverse=True)
+
+    return dict(by_source)
+
+
+def group_sales_by_source(sales: List[Sale]) -> Dict[str, List[Sale]]:
+    """
+    Return {source: [Sale, ...]} sorted by date desc.
+    """
+    by_source: Dict[str, List[Sale]] = defaultdict(list)
+    for s in sales:
+        by_source[s.source].append(s)
+
+    for rows in by_source.values():
+        rows.sort(key=lambda s: s.sale_date, reverse=True)
+
+    return dict(by_source)
+
 
 @app.on_event("startup")
 async def on_startup():
@@ -146,14 +269,44 @@ async def listing_detail(request: Request, listing_id: int):
         stmt = select(RewListing).where(RewListing.id == listing_id)
         listing = (await session.execute(stmt)).scalar_one_or_none()
 
-    if listing is None:
-        raise HTTPException(status_code=404, detail="Listing not found")
+        if listing is None:
+            raise HTTPException(status_code=404, detail="Listing not found")
+        
+        merged_assessments: List[Dict[str, Any]] = []
+        merged_sales: List[Dict[str, Any]] = []
+        raw_assessments_by_source: Dict[str, List[Assessment]] = {}
+        raw_sales_by_source: Dict[str, List[Sale]] = {}
+
+        # Only attempt to lookup history if listing is linked to cannonical property
+        if listing.property_id is not None:
+            assessment_result = await session.execute(
+                select(Assessment).where(
+                    Assessment.property_id == listing.property_id
+                )
+            )
+            assessments: List[Assessment] = assessment_result.scalars().all()
+            
+            sales_result = await session.execute(
+                select(Sale).where(
+                    Sale.property_id == listing.property_id
+                )
+            )
+            sales: List[Sale] = sales_result.scalars().all()
+
+            merged_assessments = merge_assessments(assessments)
+            merged_sales = merge_sales(sales)
+            raw_assessments_by_source = group_assessments_by_source(assessments)
+            raw_sales_by_source = group_sales_by_source(sales)
 
     return templates.TemplateResponse(
         "listing_detail.html",
         {
             "request": request,
             "listing": listing,
+            "merged_assessments": merged_assessments,
+            "merged_sales": merged_sales,
+            "raw_assessments_by_source": raw_assessments_by_source, 
+            "raw_sales_by_source": raw_sales_by_source
         },
     )
 

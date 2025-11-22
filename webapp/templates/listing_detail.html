@@ -11,7 +11,14 @@
     dd { margin: 0 0 0.25rem 0; }
     .section { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid #ddd; }
     code { font-size: 0.9em; }
+
+    table { border-collapse: collapse; width: 100%; margin-top: 0.5rem; }
+    th, td { border: 1px solid #ddd; padding: 0.25rem 0.5rem; text-align: left; }
+    th { background: #f7f7f7; }
+    details { margin-top: 1rem; }
+    details summary { cursor: pointer; font-weight: 600; }
   </style>
+
 </head>
 <body>
   <div class="container">
@@ -101,6 +108,171 @@
         <dt>Views</dt><dd>{{ listing.views if listing.views is not none else "—" }}</dd>
         <dt>Scraped At</dt><dd>{{ listing.scraped_at or "—" }}</dd>
       </dl>
+    </div>
+
+    <div class="section">
+      <h3>Valuation &amp; History</h3>
+
+      <h4>Assessment History (Merged)</h4>
+      {% if merged_assessments and merged_assessments|length > 0 %}
+        <table>
+          <thead>
+            <tr>
+              <th>Year</th>
+              <th>Total Assessed</th>
+              <th>Land</th>
+              <th>Building</th>
+              <th>Change vs Prev</th>
+              <th>Primary Source</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in merged_assessments %}
+              <tr>
+                <td>{{ row.assessment_year }}</td>
+                <td>${{ "{:,}".format(row.total_assessed_cad) }}</td>
+                <td>
+                  {% if row.land_value is not none %}
+                    ${{ "{:,}".format(row.land_value) }}
+                  {% else %}—{% endif %}
+                </td>
+                <td>
+                  {% if row.building_value is not none %}
+                    ${{ "{:,}".format(row.building_value) }}
+                  {% else %}—{% endif %}
+                </td>
+                <td>
+                  {% if row.change_pct is not none %}
+                    {{ "%.1f"|format(row.change_pct) }}%
+                  {% else %}—{% endif %}
+                </td>
+                <td>{{ row.primary_source }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <p style="font-size:0.85em;color:#555;">
+          Merged from multiple sources where available. Primary source wins per year.
+        </p>
+      {% else %}
+        <p>No assessment history available.</p>
+      {% endif %}
+
+      <h4>Sales History (Merged)</h4>
+      {% if merged_sales and merged_sales|length > 0 %}
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Sale Price</th>
+              <th>Price / ft²</th>
+              <th>Beds</th>
+              <th>Baths</th>
+              <th>Primary Source</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in merged_sales %}
+              <tr>
+                <td>{{ row.sale_date }}</td>
+                <td>${{ "{:,}".format(row.sale_price_cad) }}</td>
+                <td>
+                  {% if row.price_per_sqft is not none %}
+                    ${{ "%.0f"|format(row.price_per_sqft) }}
+                  {% else %}—{% endif %}
+                </td>
+                <td>{{ row.beds if row.beds is not none else "—" }}</td>
+                <td>{{ row.baths if row.baths is not none else "—" }}</td>
+                <td>{{ row.primary_source }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p>No sales history available.</p>
+      {% endif %}
+
+      <details>
+        <summary>Show raw data by source</summary>
+
+        <h5>Assessment (by source)</h5>
+        {% if raw_assessments_by_source %}
+          {% for source, rows in raw_assessments_by_source.items() %}
+            <h6>{{ source }}</h6>
+            <table>
+              <thead>
+                <tr>
+                  <th>Year</th>
+                  <th>Total</th>
+                  <th>Land</th>
+                  <th>Building</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for a in rows %}
+                  <tr>
+                    <td>{{ a.assessment_year }}</td>
+                    <td>${{ "{:,}".format(a.total_assessed_cad) }}</td>
+                    <td>
+                      {% if a.land_value is not none %}
+                        ${{ "{:,}".format(a.land_value) }}
+                      {% else %}—{% endif %}
+                    </td>
+                    <td>
+                      {% if a.building_value is not none %}
+                        ${{ "{:,}".format(a.building_value) }}
+                      {% else %}—{% endif %}
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          {% endfor %}
+        {% else %}
+          <p>No raw assessment rows.</p>
+        {% endif %}
+
+        <h5>Sales (by source)</h5>
+        {% if raw_sales_by_source %}
+          {% for source, rows in raw_sales_by_source.items() %}
+            <h6>{{ source }}</h6>
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Sale Price</th>
+                  <th>List Price</th>
+                  <th>Beds</th>
+                  <th>Baths</th>
+                  <th>sqft</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for s in rows %}
+                  <tr>
+                    <td>{{ s.sale_date }}</td>
+                    <td>
+                      {% if s.sale_price_cad is not none %}
+                        ${{ "{:,}".format(s.sale_price_cad) }}
+                      {% else %}—{% endif %}
+                    </td>
+                    <td>
+                      {% if s.list_price_cad is not none %}
+                        ${{ "{:,}".format(s.list_price_cad) }}
+                      {% else %}—{% endif %}
+                    </td>
+                    <td>{{ s.beds if s.beds is not none else "—" }}</td>
+                    <td>{{ s.baths if s.baths is not none else "—" }}</td>
+                    <td>{{ s.sqft if s.sqft is not none else "—" }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          {% endfor %}
+        {% else %}
+          <p>No raw sales rows.</p>
+        {% endif %}
+      </details>
     </div>
 
     <div class="section">

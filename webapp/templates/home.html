@@ -65,7 +65,9 @@
     {% for l in latest %}
     <tr>
       <td>{{ l.scraped_at }}</td>
-      <td><a href="{{ l.rew_url }}" target="_blank">{{ l.street_address }}</a></td>
+      <td><a href="{{ request.url_for('listing_detail', listing_id=l.id) }}">
+          {{ l.street_address or "(no address)" }}
+        </a></td>
       <td>{{ l.neighbourhood }}</td>
       <td>{{ l.city }}</td>
       <td>
