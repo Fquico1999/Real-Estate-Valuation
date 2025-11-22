@@ -2,13 +2,15 @@
 import asyncio
 import os
 import random
+from datetime import datetime
 import pathlib, logging
 from logging_config import setup_logging
 
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode
 from sqlalchemy import select
 
-from models import RewListing, AsyncSessionLocal, init_db
+from property_utils import get_or_create_property
+from models import PropertyCharacteristics, RewListing, AsyncSessionLocal, init_db
 from parsers import parse_rew_listing
 from url_queue import dequeue_next_batch, mark_done, mark_failed
 
@@ -93,8 +95,47 @@ async def scrape_listing_detail(crawler: AsyncWebCrawler, session, url: str):
     # Validate listing
     validate_listing_data(data)
 
+    # Extract address fields from parsed data
+    street = (data.get("street_address") or "").strip()
+    city = (data.get("city") or "").strip()
+    province = (data.get("province") or "BC").strip()
+    postal = (data.get("postal_code") or "").strip() or None
+
+    # Resolve or create canonical property
+    prop = await get_or_create_property(
+        session=session,
+        street=street,
+        city=city,
+        province=province,
+        postal_code=postal,
+        lat=data.get("lat"),
+        lng=data.get("lng"),
+    )
+
+    # Attach property_id to listing payload
+    data["property_id"] = prop.id
+
     await upsert_listing(session, data)
     logger.info(f"Upserted listing {data.get('mls_number')} from {url}")
+
+    # Create Structural Snapshot from listing data
+    pc = PropertyCharacteristics(
+        property_id=prop.id,
+        as_of_date=datetime.utcnow().date(),
+        source="rew",
+        beds=data.get("beds"),
+        baths=data.get("baths"),
+        sqft_finished=data.get("sqft"),
+        lot_sqft=data.get("lot_sqft"),
+        raw_blob=data,
+    )
+    logger.info("Creating Structural Snapshot...")
+    session.add(pc)
+    try:
+        await session.commit()
+    except Exception:
+        await session.rollback()  # ignore duplicate snapshot errors
+
 
 
 async def main():
