@@ -207,7 +207,10 @@ async def map_view(
             "city": l.city,
             "neighbourhood": l.neighbourhood,
             "url": l.rew_url,
-            "detail_url": str(request.url_for("listing_detail", listing_id=l.id))
+            "detail_url": str(request.url_for("listing_detail", listing_id=l.id)),
+            "beds": l.beds,
+            "baths": l.baths,
+            "sqft": l.sqft,
         }
         for l in rows
         if l.lat is not None and l.lng is not None

@@ -201,30 +201,38 @@
     const markerById = new Map();
 
     listingPoints.forEach((item) => {
-      if (item.lat == null || item.lng == null) return;
+        if (item.lat == null || item.lng == null) return;
 
-      const price = item.price
+        const price = item.price
         ? "$" + item.price.toLocaleString()
         : "Price unknown";
+    
+        // Build a compact "3 bd • 2 ba • 1,234 sqft" line
+        const detailsParts = [];
+        if (item.beds != null) detailsParts.push(`${item.beds} bd`);
+        if (item.baths != null) detailsParts.push(`${item.baths} ba`);
+        if (item.sqft != null) detailsParts.push(`${item.sqft.toLocaleString()} sqft`);
+        const detailsLine = detailsParts.join(" • ");
 
-      const popupHtml = `
-        <div>
-            <strong>${price}</strong><br/>
-            ${item.address ? item.address : "No address"}<br/>
-            ${item.city || ""} ${item.neighbourhood || ""}<br/>
-            ${item.url ? `<a href="${item.url}" target="_blank" rel="noopener noreferrer">View on REW</a>` : ""}
-            <br/>
-            ${item.detail_url ? `<a href="${item.detail_url}">View details</a>` : ""}
-        </div>
-        `;
+        const popupHtml = `
+            <div>
+                <strong>${price}</strong><br/>
+                ${detailsLine ? detailsLine + "<br/>" : ""}
+                ${item.address ? item.address : "No address"}<br/>
+                ${item.city || ""} ${item.neighbourhood || ""}<br/>
+                ${item.url ? `<a href="${item.url}" target="_blank" rel="noopener noreferrer">View on REW</a>` : ""}
+                <br/>
+                ${item.detail_url ? `<a href="${item.detail_url}">View details</a>` : ""}
+            </div>
+            `;
 
-      const marker = L.marker([item.lat, item.lng]).bindPopup(popupHtml);
-      const label = `${price} – ${item.city || ""} ${item.neighbourhood || ""}`.trim();
-      marker.bindTooltip(label, { direction: "top" });
+        const marker = L.marker([item.lat, item.lng]).bindPopup(popupHtml);
+        const label = `${price} – ${item.city || ""} ${item.neighbourhood || ""}`.trim();
+        marker.bindTooltip(label, { direction: "top" });
 
-      // Add marker to the cluster group instead of directly to the map
-      clusterGroup.addLayer(marker);
-      markerById.set(item.id, marker);
+        // Add marker to the cluster group instead of directly to the map
+        clusterGroup.addLayer(marker);
+        markerById.set(item.id, marker);
     });
 
     // Add the cluster group to the map
