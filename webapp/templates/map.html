@@ -219,6 +219,8 @@
         `;
 
       const marker = L.marker([item.lat, item.lng]).bindPopup(popupHtml);
+      const label = `${price} – ${item.city || ""} ${item.neighbourhood || ""}`.trim();
+      marker.bindTooltip(label, { direction: "top" });
 
       // Add marker to the cluster group instead of directly to the map
       clusterGroup.addLayer(marker);
