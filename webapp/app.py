@@ -164,6 +164,7 @@ async def map_view(
     max_price: Optional[str] = Query(default=None),
     min_beds: Optional[str] = Query(default=None),
     min_baths: Optional[str] = Query(default=None),
+    focus_id: Optional[int] = Query(default=None),
     ):
 
     # Safely parse query params to ints
@@ -221,6 +222,7 @@ async def map_view(
             "max_price": max_price,
             "min_beds": min_beds,
             "min_baths": min_baths,
+            "focus_id": focus_id,
         },
     )
 

@@ -175,6 +175,9 @@
     // Data from backend
     const listingPoints = {{ listing_points | tojson }};
 
+    // Listing ID to focus (if any)
+    const focusId = {{ focus_id if focus_id is not none else 'null' }};
+
     // Default center (Vancouver-ish) if no data:
     let defaultCenter = [49.2827, -123.1207];
     if (listingPoints.length > 0) {
@@ -193,6 +196,9 @@
 
     // Create a marker cluster group
     const clusterGroup = L.markerClusterGroup();
+
+    // Keep a lookup from listing id -> marker
+    const markerById = new Map();
 
     listingPoints.forEach((item) => {
       if (item.lat == null || item.lng == null) return;
@@ -216,6 +222,7 @@
 
       // Add marker to the cluster group instead of directly to the map
       clusterGroup.addLayer(marker);
+      markerById.set(item.id, marker);
     });
 
     // Add the cluster group to the map
@@ -224,6 +231,15 @@
     // Fit bounds for all clustered markers
     if (clusterGroup.getLayers().length > 0) {
       map.fitBounds(clusterGroup.getBounds().pad(0.2));
+    }
+    // If a focusId was provided, zoom to that marker and open its popup
+    if (focusId !== null) {
+      const targetMarker = markerById.get(focusId);
+      if (targetMarker) {
+        clusterGroup.zoomToShowLayer(targetMarker, () => {
+          targetMarker.openPopup();
+        });
+      }
     }
   </script>
 </body>
