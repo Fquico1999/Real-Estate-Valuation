@@ -1,7 +1,8 @@
 # scraper/parsers.py
 import json
 import re
-from typing import Any, Dict, Optional
+from datetime import date
+from typing import Any, Dict, Optional, List, Tuple
 
 from bs4 import BeautifulSoup
 
@@ -205,3 +206,53 @@ def parse_rew_listing(html: str, url: str) -> Dict[str, Any]:
     )
 
     return data
+
+
+def parse_rew_assessment_history(data: Dict[str, Any]) -> List[Dict]:
+    """
+    data = {"assessmentHistory": [...]} extracted from GraphQL payload.
+    """
+    items = data.get("assessmentHistory") or []
+    results = []
+
+    for row in items:
+        valuation_date = row.get("valuationDate")
+        if not valuation_date:
+            continue
+
+        year = date.fromisoformat(valuation_date).year
+
+        results.append({
+            "assessment_year": year,
+            "total_assessed_cad": int(row.get("value") or 0),
+            "land_value": int(row.get("landValue") or 0) or None,
+            "building_value": int(row.get("buildingValue") or 0) or None,
+            "raw": row,
+        })
+
+    return results
+
+
+def parse_rew_sales_history(data: Dict[str, Any]) -> List[Dict]:
+    """
+    data = {"salesHistory": [...]} extracted from GraphQL payload.
+    """
+    items = data.get("salesHistory") or []
+    results = []
+
+    for row in items:
+        valuation_date = row.get("valuationDate")
+        price = row.get("value")
+
+        if not valuation_date or price is None:
+            continue
+
+        sale_date = date.fromisoformat(valuation_date)
+
+        results.append({
+            "sale_date": sale_date,
+            "sale_price_cad": int(price),
+            "raw": row,
+        })
+
+    return results
