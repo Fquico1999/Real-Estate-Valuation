@@ -15,7 +15,7 @@ Additionally, to leverage the dataset and experiment with modelling property val
 
 ## To Do
 - [ ] Increase information gathered per listing - days on market, amenities, etc.
-- [ ] Figure out how to represent past sales effectively - list of tuples?
+- [x] Figure out how to represent past sales effectively - list of tuples?
 - [ ] Mechanism for updating days on market automatically - run a script daily to increment days on market?
 - [ ] Mechanism for revisting listings after some time has passed - Add a last-updated/last-checked param to RewListingURLs to revisit/scrape listings
 - [ ] Consider adding other sources than REW.
