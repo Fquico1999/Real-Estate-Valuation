@@ -2,24 +2,27 @@ from sqlalchemy import insert
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from models import RewListingUrl
 
 MAX_SCRAPE_ATTEMPTS = 5
 
-async def enqueue_urls(urls: list[str], session: AsyncSession):
-    """Insert new URLs into rew_listing_urls, ignoring duplicates."""
-    inserted = 0
-    for u in urls:
-        stmt = insert(RewListingUrl).values(url=u)
-        try:
-            await session.execute(stmt)
-            inserted += 1
-        except IntegrityError:
-            # URL already exists — ignore
-            await session.rollback()
+async def enqueue_urls(urls: list[str], session: AsyncSession) -> int:
+    """Insert new URLs into rew_listing_urls, ignoring duplicates, in bulk."""
+    if not urls:
+        return 0
 
+    # Build a bulk INSERT ... ON CONFLICT DO NOTHING
+    stmt = pg_insert(RewListingUrl).values([{"url": u} for u in urls])
+
+    # URL has a unique constraint, so we target that
+    stmt = stmt.on_conflict_do_nothing(index_elements=[RewListingUrl.url])
+
+    result = await session.execute(stmt)
     await session.commit()
-    return inserted
+
+    # result.rowcount is the number of actually inserted rows
+    return result.rowcount or 0
 
 async def dequeue_next_batch(session: AsyncSession, batch_size=10):
     """
