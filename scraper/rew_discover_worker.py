@@ -41,11 +41,11 @@ async def discover_once() -> int:
     )
 
     listing_urls = set()
-    max_pages = 5
+    max_pages = 10
 
     async with AsyncWebCrawler(config=browser_config) as crawler:
         for page in range(1, max_pages + 1):
-            url = f"{BASE_URL}/properties/areas/vancouver-bc/sort/latest"
+            url = f"{BASE_URL}/properties/areas/bc/sort/latest"
             if page > 1:
                 url += f"/page/{page}"
 
