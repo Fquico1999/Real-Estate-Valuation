@@ -1,8 +1,11 @@
 # webapp/app.py
 import os
-import json 
+import json
+
+from typing import Optional
 
 from fastapi import FastAPI, Request, HTTPException
+from fastapi import Query
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
@@ -23,6 +26,17 @@ templates = Jinja2Templates(directory="templates")
 
 app = FastAPI(title="REW Listings Viewer")
 
+def parse_int(value: Optional[str]) -> Optional[int]:
+    """Convert a query string to int, or None if empty/invalid."""
+    if value is None:
+        return None
+    value = value.strip()
+    if value == "":
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        return None
 
 @app.on_event("startup")
 async def on_startup():
@@ -144,14 +158,41 @@ async def listing_detail(request: Request, listing_id: int):
     )
 
 @app.get("/map", response_class=HTMLResponse)
-async def map_view(request: Request):
+async def map_view( 
+    request: Request, 
+    min_price: Optional[str] = Query(default=None),
+    max_price: Optional[str] = Query(default=None),
+    min_beds: Optional[str] = Query(default=None),
+    min_baths: Optional[str] = Query(default=None),
+    ):
+
+    # Safely parse query params to ints
+    min_price_int = parse_int(min_price)
+    max_price_int = parse_int(max_price)
+    min_beds_int = parse_int(min_beds)
+    min_baths_int = parse_int(min_baths)
+
     async with AsyncSessionLocal() as session:
         stmt = (
             select(RewListing)
             .where(RewListing.lat.isnot(None), RewListing.lng.isnot(None))
+            )
+        # Apply filters if provided
+        if min_price_int is not None:
+            stmt = stmt.where(RewListing.price_cad >= min_price_int)
+        if max_price_int is not None:
+            stmt = stmt.where(RewListing.price_cad <= max_price_int)
+        if min_beds_int is not None:
+            stmt = stmt.where(RewListing.beds >= min_beds_int)
+        if min_baths_int is not None:
+            stmt = stmt.where(RewListing.baths >= min_baths_int)
+
+        stmt = (
+            stmt
             .order_by(RewListing.scraped_at.desc())
-            .limit(2000)  # cap to avoid loading thousands at once
+            .limit(2000)  # hardcoded cap. To be replaced by dynamic loading later.
         )
+
         rows = (await session.execute(stmt)).scalars().all()
 
     # Convert to a simple list of dicts for JSON use in the template
@@ -176,6 +217,10 @@ async def map_view(request: Request):
         {
             "request": request,
             "listing_points": listing_points,
+            "min_price": min_price,
+            "max_price": max_price,
+            "min_beds": min_beds,
+            "min_baths": min_baths,
         },
     )
 

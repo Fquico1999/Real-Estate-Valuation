@@ -38,9 +38,52 @@
       text-decoration: none;
       color: #0070f3;
     }
+    .filters-bar {
+      padding: 0.5rem 1rem;
+      border-bottom: 1px solid #eee;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+      background: #fafafa;
+      font-size: 0.9rem;
+    }
+    .filters-bar label {
+      display: flex;
+      flex-direction: column;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      color: #555;
+    }
+    .filters-bar input {
+      padding: 0.25rem 0.4rem;
+      font-size: 0.9rem;
+      min-width: 6rem;
+    }
+    .filters-bar button {
+      padding: 0.4rem 0.8rem;
+      font-size: 0.9rem;
+      border-radius: 4px;
+      border: 1px solid #0070f3;
+      background: #0070f3;
+      color: white;
+      cursor: pointer;
+    }
+    .filters-bar button.secondary {
+      border-color: #ccc;
+      background: white;
+      color: #333;
+      margin-left: 0.25rem;
+    }
     #map {
-      height: calc(100vh - 48px); /* full height minus top bar */
+      height: calc(100vh - 48px - 46px); /* top bar + filters bar */
       width: 100%;
+    }
+    @media (max-width: 600px) {
+      #map {
+        height: calc(100vh - 48px - 72px);
+      }
     }
   </style>
 </head>
@@ -55,6 +98,64 @@
       <a href="{{ request.url_for('home') }}">Dashboard</a>
     </div>
   </div>
+  <!-- Filters -->
+  <form class="filters-bar" method="get" action="{{ request.url_for('map_view') }}">
+    <label>
+      Min Price
+      <input
+        type="number"
+        name="min_price"
+        min="0"
+        step="50000"
+        value="{{ min_price if min_price is not none else '' }}"
+        placeholder="e.g. 800000"
+      />
+    </label>
+    <label>
+      Max Price
+      <input
+        type="number"
+        name="max_price"
+        min="0"
+        step="50000"
+        value="{{ max_price if max_price is not none else '' }}"
+        placeholder="e.g. 1500000"
+      />
+    </label>
+    <label>
+      Min Beds
+      <input
+        type="number"
+        name="min_beds"
+        min="0"
+        step="1"
+        value="{{ min_beds if min_beds is not none else '' }}"
+        placeholder="e.g. 2"
+      />
+    </label>
+    <label>
+      Min Baths
+      <input
+        type="number"
+        name="min_baths"
+        min="0"
+        step="1"
+        value="{{ min_baths if min_baths is not none else '' }}"
+        placeholder="e.g. 2"
+      />
+    </label>
+
+    <div>
+      <button type="submit">Apply</button>
+      <button
+        type="button"
+        class="secondary"
+        onclick="window.location='{{ request.url_for('map_view') }}'"
+      >
+        Reset
+      </button>
+    </div>
+  </form>
 
   <div id="map"></div>
 
