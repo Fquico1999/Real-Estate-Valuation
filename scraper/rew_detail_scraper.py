@@ -2,6 +2,8 @@
 import asyncio
 import os
 import random
+import pathlib, logging
+from logging_config import setup_logging
 
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode
 from sqlalchemy import select
@@ -13,6 +15,9 @@ from url_queue import dequeue_next_batch, mark_done, mark_failed
 EMPTY_QUEUE_SLEEP_SECONDS = 60  # how long to sleep when no URLs are pending
 PER_URL_SLEEP_SECONDS = 1 # How long to pause for after processing a URL
 PAGE_LOAD_TIMEOUT_SECONDS = 60  # Safety timeout per page
+
+logger = logging.getLogger(f"scraper.{pathlib.Path(__file__).stem}")
+setup_logging()
 
 async def upsert_listing(session, data: dict):
     rew_url = data.get("rew_url")
@@ -68,7 +73,7 @@ def validate_listing_data(data: dict) -> None:
 async def scrape_listing_detail(crawler: AsyncWebCrawler, session, url: str):
     run_conf = CrawlerRunConfig(cache_mode=CacheMode.BYPASS)
 
-    print(f"[SCRAPER] Scraping {url}")
+    logger.info(f"Scraping {url}")
     result = await asyncio.wait_for(
             crawler.arun(url=url, config=run_conf),
             timeout=PAGE_LOAD_TIMEOUT_SECONDS
@@ -78,7 +83,7 @@ async def scrape_listing_detail(crawler: AsyncWebCrawler, session, url: str):
     # adjust to result.html / result.content if needed.
     html = getattr(result, "html", None) or getattr(result, "content", None)
     if not html:
-        print(f"[SCRAPER] No HTML for {url}")
+        logger.info(f"No HTML for {url}")
         return
 
     data = parse_rew_listing(html, url)
@@ -89,12 +94,12 @@ async def scrape_listing_detail(crawler: AsyncWebCrawler, session, url: str):
     validate_listing_data(data)
 
     await upsert_listing(session, data)
-    print(f"[SCRAPER] Upserted listing {data.get('mls_number')} from {url}")
+    logger.info(f"Upserted listing {data.get('mls_number')} from {url}")
 
 
 async def main():
     await init_db()
-    print("[SCRAPER] DB init complete")
+    logger.info("DB init complete")
 
     # Configure browser ONCE
     browser_conf = BrowserConfig( 
@@ -108,17 +113,17 @@ async def main():
         ])
 
     # Long-running worker loop
-    print("[SCRAPER] Creating AsyncWebCrawler...")
+    logger.info("Creating AsyncWebCrawler...")
     async with AsyncWebCrawler(config=browser_conf) as crawler:
-        print("[SCRAPER] Crawler ready, entering main loop")
+        logger.info("Crawler ready, entering main loop")
         while True:
             # Create new session every batch to prevent stale connections
             async with AsyncSessionLocal() as session:
-                print(f"[SCRAPER] Starting new batch...")
+                logger.info(f"Starting new batch...")
                 batch = await dequeue_next_batch(session, batch_size=5)
 
                 if not batch:
-                    print(f"[SCRAPER] No pending URLs. Sleeping for {EMPTY_QUEUE_SLEEP_SECONDS} seconds...")
+                    logger.info(f"No pending URLs. Sleeping for {EMPTY_QUEUE_SLEEP_SECONDS} seconds...")
                     await asyncio.sleep(EMPTY_QUEUE_SLEEP_SECONDS)
                     continue
 
@@ -129,8 +134,8 @@ async def main():
                     except Exception as e:
                         # Also includes validation failures
                         await mark_failed(session, url_id, str(e))
-                        print(f"[SCRAPER] Failed: {url} ({e})")
-                    print(f"[SCRAPER] Finished scraping... Sleeping for {PER_URL_SLEEP_SECONDS} seconds.")
+                        logger.warning(f"Failed: {url} ({e})")
+                    logger.info(f"Finished scraping... Sleeping for {PER_URL_SLEEP_SECONDS} seconds.")
                     await asyncio.sleep(PER_URL_SLEEP_SECONDS + random.uniform(0, 1))
 
 

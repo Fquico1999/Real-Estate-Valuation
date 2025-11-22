@@ -3,6 +3,8 @@ import asyncio
 import random
 from datetime import datetime
 from urllib.parse import urljoin
+import logging, pathlib
+from logging_config import setup_logging
 
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode
 from bs4 import BeautifulSoup
@@ -20,6 +22,9 @@ BACKOFF_BASE_SECONDS = 2        # starting backoff
 BACKOFF_MAX_SECONDS = 30        # clamp max backoff
 MAX_CONSECUTIVE_FAILED_PAGES = 3
 
+logger = logging.getLogger(f"discoverer.{pathlib.Path(__file__).stem}")
+setup_logging()
+
 
 async def fetch_page_with_retries(crawler, url: str, run_config: CrawlerRunConfig) -> str | None:
     """
@@ -28,7 +33,7 @@ async def fetch_page_with_retries(crawler, url: str, run_config: CrawlerRunConfi
     """
     for attempt in range(1, MAX_RETRIES_PER_PAGE + 1):
         try:
-            print(f"[FETCH] ({attempt}/{MAX_RETRIES_PER_PAGE}) {url}")
+            logger.info(f"({attempt}/{MAX_RETRIES_PER_PAGE}) {url}")
             result = await asyncio.wait_for(
                 crawler.arun(url=url, config=run_config),
                 timeout=PAGE_LOAD_TIMEOUT_SECONDS,
@@ -49,14 +54,14 @@ async def fetch_page_with_retries(crawler, url: str, run_config: CrawlerRunConfi
         except (asyncio.TimeoutError, Exception) as e:
             # Last attempt -> give up
             if attempt == MAX_RETRIES_PER_PAGE:
-                print(f"[ERROR] Failed to fetch {url} after {attempt} attempts: {e}")
+                logger.error(f"Failed to fetch {url} after {attempt} attempts: {e}")
                 return None
 
             # Compute backoff with jitter: base * 2^(attempt-1) + random(0,1)
             backoff = BACKOFF_BASE_SECONDS * (2 ** (attempt - 1)) + random.uniform(0, 1)
             backoff = min(backoff, BACKOFF_MAX_SECONDS)
-            print(
-                f"[WARN] Error fetching {url} (attempt {attempt}/{MAX_RETRIES_PER_PAGE}): {e}. "
+            logger.warning(
+                f"Error fetching {url} (attempt {attempt}/{MAX_RETRIES_PER_PAGE}): {e}. "
                 f"Retrying in {backoff:.2f} seconds..."
             )
             await asyncio.sleep(backoff)
@@ -70,7 +75,7 @@ async def discover_all() -> int:
 
     Returns the number of new URLs inserted.
     """
-    print(f"[{datetime.utcnow().isoformat()}] Starting full discovery of BC latest listings...")
+    logger.info(f"Starting full discovery of BC latest listings...")
 
     browser_config = BrowserConfig(
         headless=True,
@@ -98,18 +103,18 @@ async def discover_all() -> int:
             if page > 1:
                 url += f"/page/{page}"
 
-            print(f"[DISCOVER] Processing page {page}: {url}")
+            logger.info(f"Processing page {page}: {url}")
 
             html = await fetch_page_with_retries(crawler, url, run_config)
 
             # If we still have no HTML after retries, count a failed page and decide whether to stop
             if not html:
                 consecutive_failed_pages += 1
-                print(f"[WARN] Giving up on page {page}. Consecutive failed pages: {consecutive_failed_pages}")
+                logger.warning(f"Giving up on page {page}. Consecutive failed pages: {consecutive_failed_pages}")
 
                 if consecutive_failed_pages >= MAX_CONSECUTIVE_FAILED_PAGES:
-                    print(
-                        f"[ERROR] Reached {MAX_CONSECUTIVE_FAILED_PAGES} consecutive failed pages. "
+                    logger.error(
+                        f"Reached {MAX_CONSECUTIVE_FAILED_PAGES} consecutive failed pages. "
                         f"Stopping discovery."
                     )
                     break
@@ -133,18 +138,18 @@ async def discover_all() -> int:
                 if "/properties/" in full_url:
                     page_urls.add(full_url)
 
-            print(f"  -> page {page}: found {len(page_urls)} listing URLs")
+            logger.info(f"  -> page {page}: found {len(page_urls)} listing URLs")
 
             # Stop when we reach a page with no listings
             if not page_urls:
-                print(f"[INFO] No listing URLs found on page {page}. Assuming end of pagination.")
+                logger.info(f"No listing URLs found on page {page}. Assuming end of pagination.")
                 break
 
             listing_urls.update(page_urls)
 
             # Sleep a bit before next page to avoid rate limiting
             sleep_for = PER_PAGE_SLEEP_SECONDS + random.uniform(0, 1)
-            print(f"[DISCOVER] Sleeping {sleep_for:.2f} seconds before next page...")
+            logger.info(f"Sleeping {sleep_for:.2f} seconds before next page...")
             await asyncio.sleep(sleep_for)
 
             page += 1
@@ -155,10 +160,10 @@ async def discover_all() -> int:
         async with AsyncSessionLocal() as session:
             inserted = await enqueue_urls(list(listing_urls), session)
 
-    print(f"[{datetime.utcnow().isoformat()}] Discovery complete.")
-    print(f"  Total pages visited (including failed/empty): {page - 1}")
-    print(f"  Unique listing URLs found: {len(listing_urls)}")
-    print(f"  Inserted {inserted} new URLs into rew_listing_urls.")
+    logger.info(f"Discovery complete.")
+    logger.info(f"  Total pages visited (including failed/empty): {page - 1}")
+    logger.info(f"  Unique listing URLs found: {len(listing_urls)}")
+    logger.info(f"  Inserted {inserted} new URLs into rew_listing_urls.")
     return inserted
 
 
@@ -171,4 +176,4 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("Discovery stopped by user.")
+        logger.warning("Discovery stopped by user.")
