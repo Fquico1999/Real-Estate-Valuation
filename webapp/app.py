@@ -150,7 +150,7 @@ async def map_view(request: Request):
             select(RewListing)
             .where(RewListing.lat.isnot(None), RewListing.lng.isnot(None))
             .order_by(RewListing.scraped_at.desc())
-            .limit(500)  # cap to avoid loading thousands at once
+            .limit(2000)  # cap to avoid loading thousands at once
         )
         rows = (await session.execute(stmt)).scalars().all()
 

@@ -11,6 +11,15 @@
     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
     crossorigin=""
   />
+    <!-- Leaflet MarkerCluster CSS -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"
+  />
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"
+  />
 
   <style>
     body {
@@ -55,6 +64,11 @@
     integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
     crossorigin=""
   ></script>
+  <!-- Leaflet MarkerCluster JS -->
+  <script
+    src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"
+  ></script>
+
 
   <script>
     // Data from backend
@@ -76,7 +90,8 @@
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(map);
 
-    const markers = [];
+    // Create a marker cluster group
+    const clusterGroup = L.markerClusterGroup();
 
     listingPoints.forEach((item) => {
       if (item.lat == null || item.lng == null) return;
@@ -96,16 +111,18 @@
         </div>
         `;
 
-      const marker = L.marker([item.lat, item.lng])
-        .addTo(map)
-        .bindPopup(popupHtml);
+      const marker = L.marker([item.lat, item.lng]).bindPopup(popupHtml);
 
-      markers.push(marker);
+      // Add marker to the cluster group instead of directly to the map
+      clusterGroup.addLayer(marker);
     });
 
-    if (markers.length > 0) {
-      const group = L.featureGroup(markers);
-      map.fitBounds(group.getBounds().pad(0.2));
+    // Add the cluster group to the map
+    map.addLayer(clusterGroup);
+
+    // Fit bounds for all clustered markers
+    if (clusterGroup.getLayers().length > 0) {
+      map.fitBounds(clusterGroup.getBounds().pad(0.2));
     }
   </script>
 </body>
