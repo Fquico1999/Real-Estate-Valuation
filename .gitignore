@@ -3,3 +3,4 @@ venv/
 scraper/venv/
 scraper/.python-version
 __pycache__
+temp/
