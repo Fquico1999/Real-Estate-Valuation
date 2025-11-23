@@ -14,6 +14,13 @@ services:
     volumes:
       - db_data:/var/lib/postgresql/data
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rewuser -d real_estate"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
 
   rew_scraper:
     build:
@@ -22,7 +29,8 @@ services:
     init: true
     shm_size: '2gb'
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     environment:
       DATABASE_URL: postgresql+asyncpg://rewuser:rewpass@db:5432/real_estate
     command: ["python", "rew_detail_scraper.py"]
@@ -34,7 +42,8 @@ services:
     init: true
     shm_size: '2gb'
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     environment:
       DATABASE_URL: postgresql+asyncpg://rewuser:rewpass@db:5432/real_estate
     command: ["python", "rew_discover_worker.py"]
@@ -46,7 +55,8 @@ services:
     init: true
     shm_size: '2gb'
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     environment:
       DATABASE_URL: postgresql+asyncpg://rewuser:rewpass@db:5432/real_estate
     command: ["python", "bc_assessment_worker.py"]
@@ -56,7 +66,8 @@ services:
       context: ./webapp
     container_name: re_webapp
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     environment:
       DATABASE_URL: postgresql+asyncpg://rewuser:rewpass@db:5432/real_estate
     ports:
