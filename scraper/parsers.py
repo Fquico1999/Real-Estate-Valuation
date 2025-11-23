@@ -3,6 +3,7 @@ import json
 import re
 from datetime import date
 from typing import Any, Dict, Optional, List, Tuple
+from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
 
@@ -47,6 +48,12 @@ def _parse_int(text: Optional[str]) -> Optional[int]:
         return None
     s = "".join(ch for ch in text if ch.isdigit())
     return int(s) if s else None
+
+def _parse_float(text: Optional[str]) -> Optional[float]:
+    if not text:
+        return None
+    s = "".join(ch for ch in text if (ch.isdigit() or ch == "."))
+    return float(s) if s else None
 
 
 def _parse_days(text: str) -> Optional[int]:
@@ -256,3 +263,205 @@ def parse_rew_sales_history(data: Dict[str, Any]) -> List[Dict]:
         })
 
     return results
+
+def _extract_bc_main_address(html: str) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    """
+    Parse the big heading like:
+      "3950 10TH AVE W VANCOUVER V6R 2G8"
+    into (street_address, city, postal_code)
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    tag = soup.select_one("#mainaddresstitle")
+    if not tag:
+        return None, None, None
+
+    txt = tag.get_text(" ", strip=True)
+
+    # Split postal code off the end if present
+    m = re.search(r"(.+?)\s+([A-Z]\d[A-Z]\s*\d[A-Z]\d)$", txt)
+    if m:
+        pre = m.group(1)
+        postal_raw = m.group(2).replace(" ", "")
+        postal = postal_raw[:3] + " " + postal_raw[3:] if len(postal_raw) == 6 else postal_raw
+    else:
+        pre = txt
+        postal = None
+
+    parts = pre.split()
+    if len(parts) >= 2:
+        city = parts[-1]
+        street = " ".join(parts[:-1])
+    else:
+        street = pre
+        city = None
+
+    return street, city, postal
+
+
+def parse_bc_assessment_property_characteristics(html_content: str) -> Dict[str, Any]:
+    """
+    Parse BC Assessment HTML to extract physical property characteristics.
+
+    Returns a dict that can be mapped directly into PropertyCharacteristics +
+    raw_blob.
+    """
+    soup = BeautifulSoup(html_content, "html.parser")
+    data: Dict[str, Any] = {}
+
+    def get_text(selector: str) -> Optional[str]:
+        el = soup.select_one(selector)
+        return el.get_text(strip=True) if el else None
+
+    # --- as_of_date from #lblLastAssessmentDate ---
+    assessment_date_text = get_text("#lblLastAssessmentDate")
+    current_year = None
+    if assessment_date_text:
+        m = re.search(r"(\d{4})", assessment_date_text)
+        if m:
+            current_year = int(m.group(1))
+
+    if current_year:
+        data["as_of_date"] = date(current_year, 1, 1)
+    else:
+        data["as_of_date"] = date.today()
+
+    # Basic fields
+    data["year_built"] = _parse_int(get_text("#lblYearBuilt"))
+    data["beds"] = _parse_float(get_text("#lblBedrooms"))
+    data["baths"] = _parse_float(get_text("#lblBathRooms"))
+    data["description"] = get_text("#lblDescription")
+    data["carports"] = _parse_int(get_text("#lblCarPorts"))
+    data["garages"] = _parse_int(get_text("#lblGarages"))
+    data["building_storeys"] = _parse_int(get_text("#lblStoriesBuilding"))
+    land_size_raw = get_text("#lblLandSize")
+    data["land_size_raw"] = land_size_raw
+
+    # Floor areas
+    first_floor = _parse_int(get_text("#lblFirstFloorArea"))
+    second_floor = _parse_int(get_text("#lblSecondFloorArea"))
+    basement_finish = _parse_int(get_text("#lblBasementFinishArea"))
+
+    total_finished = (first_floor or 0) + (second_floor or 0) + (basement_finish or 0)
+    data["sqft_finished"] = total_finished or None
+    data["sqft_unfinished"] = None
+
+    # Lot sqft from '33 x 122.5 Ft' style string
+    lot_sqft: Optional[int] = None
+    if land_size_raw:
+        m = re.search(r"([\d\.]+)\s*x\s*([\d\.]+)\s*Ft", land_size_raw, re.IGNORECASE)
+        if m:
+            try:
+                dim1 = float(m.group(1))
+                dim2 = float(m.group(2))
+                lot_sqft = int(round(dim1 * dim2))
+            except Exception:
+                lot_sqft = None
+    data["lot_sqft"] = lot_sqft
+
+    # Extra area fields if you want them later
+    data["strata_area"] = _parse_int(get_text("#lblStrataTotalArea"))
+    data["gross_leasable_area"] = _parse_int(get_text("#lblGrossLeasableArea"))
+    data["net_leasable_area"] = _parse_int(get_text("#lblNetLeasableArea"))
+    data["no_of_apartment_units"] = _parse_int(get_text("#lblNumberUnitApartment"))
+
+    return data
+
+
+def parse_bc_assessment_assessments(html_content: str) -> List[Dict[str, Any]]:
+    """
+    Parse current & previous year assessed values from BC Assessment.
+    Returns a list of dicts for Assessment rows (without property_id/source).
+    """
+    soup = BeautifulSoup(html_content, "html.parser")
+
+    def get_text(selector: str) -> Optional[str]:
+        el = soup.select_one(selector)
+        return el.get_text(strip=True) if el else None
+
+    def clean_money(selector: str) -> Optional[int]:
+        txt = get_text(selector)
+        if not txt:
+            return None
+        cleaned = re.sub(r"[$,\s]", "", txt)
+        try:
+            return int(cleaned)
+        except Exception:
+            return None
+
+    # Assessment year(s)
+    assessment_date_text = get_text("#lblLastAssessmentDate")
+    current_year = None
+    prev_year = None
+    if assessment_date_text:
+        m = re.search(r"(\d{4})", assessment_date_text)
+        if m:
+            current_year = int(m.group(1))
+            prev_year = current_year - 1
+
+    rows: List[Dict[str, Any]] = []
+
+    if current_year:
+        total = clean_money("div.total-value span#lblTotalAssessedValue")
+        if total is not None:
+            rows.append(
+                {
+                    "assessment_year": current_year,
+                    "total_assessed_cad": total,
+                    "land_value": clean_money("div.land-building-value p#lblTotalAssessedLand"),
+                    "building_value": clean_money(
+                        "div.land-building-value p#lblTotalAssessedBuilding"
+                    ),
+                }
+            )
+
+    if prev_year:
+        total_prev = clean_money("div.previous-year-value p#lblPreviousAssessedValue")
+        if total_prev is not None:
+            rows.append(
+                {
+                    "assessment_year": prev_year,
+                    "total_assessed_cad": total_prev,
+                    "land_value": clean_money(
+                        "div.previous-year-value p#lblPreviousAssessedLand"
+                    ),
+                    "building_value": clean_money(
+                        "div.previous-year-value p#lblPreviousAssessedBuilding"
+                    ),
+                }
+            )
+
+    return rows
+
+
+def parse_bc_assessment_neighbor_urls(html_content: str, base_url: str = "https://www.bcassessment.ca") -> List[str]:
+    """
+    Extract neighbouring property detail URLs from the 'Neighbouring properties'
+    panel (desktop & mobile variants).
+    """
+    soup = BeautifulSoup(html_content, "html.parser")
+    urls: set[str] = set()
+
+    # 1) Direct <a href="/Property/Info/.../"> links in panels
+    for a in soup.select(
+        "#NerbyProperties-mobile .property-panel-mobile a[href], "
+        "#NerbyProperties .property-panel-desktop a[href]"
+    ):
+        href = a.get("href")
+        if not href:
+            continue
+        if "/Property/Info/" in href:
+            urls.add(urljoin(base_url, href))
+
+    # 2) Buttons like: onclick="window.location.href = '/Property/Info/.../'"
+    for btn in soup.select(
+        "#NerbyProperties-mobile .details-button button[onclick], "
+        "#NerbyProperties .details-button button[onclick]"
+    ):
+        onclick = btn.get("onclick") or ""
+        m = re.search(r"window\.location\.href\s*=\s*'([^']+)'", onclick)
+        if m:
+            href = m.group(1)
+            if "/Property/Info/" in href:
+                urls.add(urljoin(base_url, href))
+
+    return sorted(urls)
