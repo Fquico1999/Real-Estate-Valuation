@@ -38,6 +38,25 @@ class RewListingUrl(Base):
     attempts = Column(Integer, nullable=False, server_default="0")
     last_error = Column(Text)
 
+class BCAssessmentUrl(Base):
+    """
+    Queue of BC Assessment property pages to crawl.
+
+    We store fully qualified URLs like:
+      https://www.bcassessment.ca/Property/Info/QTAwMDAwMDFaTA==/
+    plus metadata for worker retries.
+    """
+    __tablename__ = "bc_assessment_urls"
+
+    id = Column(Integer, primary_key=True)
+    url = Column(Text, unique=True, nullable=False)
+    bc_property_id = Column(String(64))  # e.g. 'QTAwMDAwMDFaTA=='
+    discovered_at = Column(DateTime(timezone=True), server_default=func.now())
+    status = Column(Text, nullable=False, server_default="pending")
+    last_attempt_at = Column(DateTime(timezone=True))
+    attempts = Column(Integer, nullable=False, server_default="0")
+    last_error = Column(Text)
+
 
 class Property(Base):
     __tablename__ = "properties"
