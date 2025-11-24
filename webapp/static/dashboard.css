@@ -216,3 +216,126 @@ th {
     grid-template-columns: 1fr; /* Stack on very small screens */
   }
 }
+
+.hero-panel {
+  padding-top: 14px;
+  padding-bottom: 14px;
+}
+
+.hero-top-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.hero-main-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px;
+}
+
+.hero-title-block h1 {
+  margin: 0;
+}
+
+.hero-title-block p {
+  margin: 4px 0 0;
+}
+
+.hero-price-block {
+  text-align: right;
+}
+
+.hero-price {
+  font-size: 1.8rem;
+  font-weight: 600;
+}
+
+/* Stack nicely on small screens */
+@media (max-width: 640px) {
+  .hero-top-row,
+  .hero-main-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .hero-price-block {
+    text-align: left;
+    width: 100%;
+  }
+
+  .hero-price {
+    margin-top: 8px;
+  }
+}
+
+
+/* Two-column layout for detail pages */
+.two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+@media (max-width: 600px) {
+  .two-col {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Definition list styling: label/value rows */
+.def-list {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  column-gap: 16px;
+  row-gap: 4px; /* Reduced row gap for tighter list */
+  font-size: 0.9rem;
+  padding-top: 4px; /* Add slight padding above the list for separation from heading */
+}
+
+.def-list dt, 
+.def-list dd {
+  padding: 4px 0; /* Added padding to create visual row separation */
+  margin: 0; /* Ensures no default margins */
+}
+
+.def-list dt {
+  font-weight: 600;
+  color: var(--text-muted);
+  text-align: right;
+  /* Add subtle bottom border to distinguish rows, similar to your table style */
+  border-bottom: 1px solid var(--border); 
+}
+
+.def-list dd {
+  /* Match the border style on the other side of the row */
+  border-bottom: 1px solid var(--border);
+}
+/* On small screens, stack label above value */
+@media (max-width: 700px) {
+  .def-list {
+    grid-template-columns: 1fr;
+  }
+
+  .def-list dt {
+    text-align: left;
+    margin-top: 0.4rem;
+  }
+
+  .def-list dd {
+    margin-bottom: 0.2rem;
+  }
+}
+
+/* Raw JSON block */
+pre {
+  background: #111827;
+  color: #e5e7eb;
+  padding: 12px 14px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  overflow-x: auto;
+}
+

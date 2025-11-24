@@ -3,117 +3,172 @@
 <head>
   <meta charset="utf-8" />
   <title>Listing {{ listing.id }} – Details</title>
-  <style>
-    body { font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif; margin: 2rem; }
-    .container { max-width: 960px; margin: 0 auto; }
-    .back-link { margin-bottom: 1rem; display: inline-block; }
-    dt { font-weight: 600; margin-top: 0.5rem; }
-    dd { margin: 0 0 0.25rem 0; }
-    .section { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid #ddd; }
-    code { font-size: 0.9em; }
-
-    table { border-collapse: collapse; width: 100%; margin-top: 0.5rem; }
-    th, td { border: 1px solid #ddd; padding: 0.25rem 0.5rem; text-align: left; }
-    th { background: #f7f7f7; }
-    details { margin-top: 1rem; }
-    details summary { cursor: pointer; font-weight: 600; }
-  </style>
-
+  <link rel="stylesheet" href="{{ url_for('static', path='/dashboard.css') }}?v=1">
 </head>
 <body>
   <div class="container">
-    <a href="{{ request.url_for('listings') }}" class="back-link">&larr; Back to listings</a>
+    <!-- Hero / header panel -->
+    <section class="panel hero-panel">
+      <div class="hero-top-row">
+        <a href="{{ request.url_for('listings') }}" class="btn-link">&larr; Back to listings</a>
+        <div class="muted">
+          Scraped {{ listing.scraped_at or "—" }}
+        </div>
+      </div>
 
-    <h1>
-      {{ listing.street_address or "Listing" }}
-      {% if listing.city %} – {{ listing.city }}{% endif %}
-    </h1>
-    {% if listing.price_cad %}
-      <h2>${{ "{:,}".format(listing.price_cad) }} CAD</h2>
-    {% endif %}
-    {% if listing.property_type_human %}
-      <p><strong>{{ listing.property_type_human }}</strong></p>
-    {% endif %}
-
-    <p>
-        <a
-        href="{{ request.url_for('map_view') }}?focus_id={{ listing.id }}"
-        style="
-        display: inline-block;
-        padding: 0.4rem 0.8rem;
-        border-radius: 4px;
-        border: 1px solid #0070f3;
-        background: #0070f3;
-        color: white;
-        text-decoration: none;
-        font-size: 0.9rem;
-        "
-    >
-        View on map
-    </a>
-    </p>
-
-
-    <div class="section">
-      <h3>Location</h3>
-      <dl>
-        <dt>Street Address</dt><dd>{{ listing.street_address or "—" }}</dd>
-        <dt>City</dt><dd>{{ listing.city or "—" }}</dd>
-        <dt>Neighbourhood</dt><dd>{{ listing.neighbourhood or "—" }}</dd>
-        <dt>Subcity</dt><dd>{{ listing.subcity or "—" }}</dd>
-        <dt>Province</dt><dd>{{ listing.province or "—" }}</dd>
-        <dt>Postal Code</dt><dd>{{ listing.postal_code or "—" }}</dd>
-        <dt>Latitude / Longitude</dt>
-        <dd>
-          {% if listing.lat and listing.lng %}
-            {{ listing.lat }}, {{ listing.lng }}
-          {% else %}
-            —
+      <div class="hero-main-row">
+        <div class="hero-title-block">
+          <h1>
+            {{ listing.street_address or "Listing" }}
+            {% if listing.city %}
+              <span class="muted"> – {{ listing.city }}</span>
+            {% endif %}
+          </h1>
+          {% if listing.property_type_human %}
+            <p class="muted">
+              {{ listing.property_type_human }}
+            </p>
           {% endif %}
-        </dd>
-      </dl>
-    </div>
+        </div>
 
-    <div class="section">
-      <h3>Property Info</h3>
-      <dl>
-        <dt>Property Type</dt><dd>{{ listing.property_type or "—" }}</dd>
-        <dt>Building Name</dt><dd>{{ listing.building_name or "—" }}</dd>
-        <dt>Beds</dt><dd>{{ listing.beds if listing.beds is not none else "—" }}</dd>
-        <dt>Baths</dt><dd>{{ listing.baths if listing.baths is not none else "—" }}</dd>
-        <dt>Square Footage</dt><dd>{{ listing.sqft if listing.sqft is not none else "—" }}</dd>
-      </dl>
-    </div>
-
-    <div class="section">
-      <h3>Listing Meta</h3>
-      <dl>
-        <dt>REW URL</dt>
-        <dd>
-          {% if listing.rew_url %}
-            <a href="{{ listing.rew_url }}" target="_blank" rel="noopener noreferrer">{{ listing.rew_url }}</a>
-          {% else %}
-            —
+        <div class="hero-price-block">
+          {% if listing.price_cad %}
+            <div class="hero-price">
+              ${{ "{:,}".format(listing.price_cad) }} CAD
+            </div>
           {% endif %}
-        </dd>
-        <dt>REW Slug</dt><dd>{{ listing.rew_slug or "—" }}</dd>
-        <dt>REW Listing ID</dt><dd>{{ listing.rew_listing_id or "—" }}</dd>
-        <dt>MLS Number</dt><dd>{{ listing.mls_number or "—" }}</dd>
-        <dt>Board</dt><dd>{{ listing.board or "—" }}</dd>
-        <dt>Source</dt><dd>{{ listing.source or "—" }}</dd>
-        <dt>Section</dt><dd>{{ listing.section or "—" }}</dd>
-        <dt>Office Name</dt><dd>{{ listing.office_name or "—" }}</dd>
-        <dt>Currency</dt><dd>{{ listing.currency or "—" }}</dd>
-        <dt>Days on REW</dt><dd>{{ listing.days_on_rew if listing.days_on_rew is not none else "—" }}</dd>
-        <dt>Views</dt><dd>{{ listing.views if listing.views is not none else "—" }}</dd>
-        <dt>Scraped At</dt><dd>{{ listing.scraped_at or "—" }}</dd>
-      </dl>
-    </div>
+          <div class="actions">
+            <a href="{{ request.url_for('map_view') }}?focus_id={{ listing.id }}" class="btn-link">
+              View on map
+            </a>
+            {% if listing.rew_url %}
+              <a href="{{ listing.rew_url }}" target="_blank" rel="noopener noreferrer" class="btn-link">
+                Open on REW
+              </a>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </section>
 
-    <div class="section">
-      <h3>Valuation &amp; History</h3>
 
-      <h4>Assessment History (Merged)</h4>
+    <!-- Quick facts cards -->
+    <section class="panel">
+      <h2>Quick Facts</h2>
+      <div class="summary-grid">
+        <div class="card">
+          <div class="card-title">Beds</div>
+          <div class="card-value">
+            {{ listing.beds if listing.beds is not none else "—" }}
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Baths</div>
+          <div class="card-value">
+            {{ listing.baths if listing.baths is not none else "—" }}
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Size (sqft)</div>
+          <div class="card-value">
+            {{ listing.sqft if listing.sqft is not none else "—" }}
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Property Type</div>
+          <div class="card-value" style="font-size: 1rem;">
+            {{ listing.property_type_human or listing.property_type or "—" }}
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Building Name</div>
+          <div class="card-value" style="font-size: 1rem;">
+            {{ listing.building_name or "—" }}
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Days on REW</div>
+          <div class="card-value">
+            {{ listing.days_on_rew if listing.days_on_rew is not none else "—" }}
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Views</div>
+          <div class="card-value">
+            {{ listing.views if listing.views is not none else "—" }}
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">MLS Number</div>
+          <div class="card-value" style="font-size: 1rem;">
+            {{ listing.mls_number or "—" }}
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Property details (Location + Listing meta) -->
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Property Details</h2>
+      </div>
+      <div class="two-col">
+        <div>
+          <h3>Location</h3>
+          <dl class="def-list">
+            <dt>Street Address</dt><dd>{{ listing.street_address or "—" }}</dd>
+            <dt>City</dt><dd>{{ listing.city or "—" }}</dd>
+            <dt>Neighbourhood</dt><dd>{{ listing.neighbourhood or "—" }}</dd>
+            <dt>Subcity</dt><dd>{{ listing.subcity or "—" }}</dd>
+            <dt>Province</dt><dd>{{ listing.province or "—" }}</dd>
+            <dt>Postal Code</dt><dd>{{ listing.postal_code or "—" }}</dd>
+            <dt>Latitude / Longitude</dt>
+            <dd>
+              {% if listing.lat and listing.lng %}
+                {{ listing.lat }}, {{ listing.lng }}
+              {% else %}
+                — 
+              {% endif %}
+            </dd>
+          </dl>
+        </div>
+
+        <div>
+          <h3>Listing Meta</h3>
+          <dl class="def-list">
+            <dt>REW URL</dt>
+            <dd>
+              {% if listing.rew_url %}
+                <a href="{{ listing.rew_url }}" target="_blank" rel="noopener noreferrer">
+                  {{ listing.rew_url }}
+                </a>
+              {% else %}
+                —
+              {% endif %}
+            </dd>
+            <dt>REW Slug</dt><dd>{{ listing.rew_slug or "—" }}</dd>
+            <dt>REW Listing ID</dt><dd>{{ listing.rew_listing_id or "—" }}</dd>
+            <dt>MLS Number</dt><dd>{{ listing.mls_number or "—" }}</dd>
+            <dt>Board</dt><dd>{{ listing.board or "—" }}</dd>
+            <dt>Source</dt><dd>{{ listing.source or "—" }}</dd>
+            <dt>Section</dt><dd>{{ listing.section or "—" }}</dd>
+            <dt>Office Name</dt><dd>{{ listing.office_name or "—" }}</dd>
+            <dt>Currency</dt><dd>{{ listing.currency or "—" }}</dd>
+          </dl>
+        </div>
+      </div>
+    </section>
+
+    <!-- Valuation & History -->
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Valuation &amp; History</h2>
+        <div class="panel-subtitle">
+          Merged assessment and sales, with raw data by source.
+        </div>
+      </div>
+
+      <h3>Assessment History (Merged)</h3>
       {% if merged_assessments and merged_assessments|length > 0 %}
         <table>
           <thead>
@@ -151,14 +206,14 @@
             {% endfor %}
           </tbody>
         </table>
-        <p style="font-size:0.85em;color:#555;">
-          Merged from multiple sources where available. Primary source wins per year.
+        <p class="muted" style="margin-top: 4px;">
+          Merged from multiple sources where available; primary source wins per year.
         </p>
       {% else %}
-        <p>No assessment history available.</p>
+        <p class="muted">No assessment history available.</p>
       {% endif %}
 
-      <h4>Sales History (Merged)</h4>
+      <h3>Sales History (Merged)</h3>
       {% if merged_sales and merged_sales|length > 0 %}
         <table>
           <thead>
@@ -189,16 +244,16 @@
           </tbody>
         </table>
       {% else %}
-        <p>No sales history available.</p>
+        <p class="muted">No sales history available.</p>
       {% endif %}
 
-      <details>
-        <summary>Show raw data by source</summary>
+      <details style="margin-top: 1rem;">
+        <summary><strong>Show raw data by source</strong></summary>
 
-        <h5>Assessment (by source)</h5>
+        <h4>Assessment (by source)</h4>
         {% if raw_assessments_by_source %}
           {% for source, rows in raw_assessments_by_source.items() %}
-            <h6>{{ source }}</h6>
+            <h5>{{ source }}</h5>
             <table>
               <thead>
                 <tr>
@@ -229,13 +284,13 @@
             </table>
           {% endfor %}
         {% else %}
-          <p>No raw assessment rows.</p>
+          <p class="muted">No raw assessment rows.</p>
         {% endif %}
 
-        <h5>Sales (by source)</h5>
+        <h4>Sales (by source)</h4>
         {% if raw_sales_by_source %}
           {% for source, rows in raw_sales_by_source.items() %}
-            <h6>{{ source }}</h6>
+            <h5>{{ source }}</h5>
             <table>
               <thead>
                 <tr>
@@ -244,7 +299,7 @@
                   <th>List Price</th>
                   <th>Beds</th>
                   <th>Baths</th>
-                  <th>sqft</th>
+                  <th>Sqft</th>
                 </tr>
               </thead>
               <tbody>
@@ -270,19 +325,23 @@
             </table>
           {% endfor %}
         {% else %}
-          <p>No raw sales rows.</p>
+          <p class="muted">No raw sales rows.</p>
         {% endif %}
       </details>
-    </div>
+    </section>
 
-    <div class="section">
-      <h3>Raw Blob</h3>
+    <!-- Raw blob -->
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Raw Blob</h2>
+        <div class="panel-subtitle">Raw listing JSON as scraped.</div>
+      </div>
       {% if listing.raw_blob %}
         <pre><code>{{ listing.raw_blob | tojson(indent=2) }}</code></pre>
       {% else %}
-        <p>No raw data stored.</p>
+        <p class="muted">No raw data stored.</p>
       {% endif %}
-    </div>
+    </section>
   </div>
 </body>
 </html>
