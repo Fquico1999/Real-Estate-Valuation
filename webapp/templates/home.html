@@ -1,96 +1,212 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>REW Listings - Dashboard</title>
+  <title>Real Estate Pipeline Dashboard</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='dashboard.css') }}">
 </head>
 <body>
-  <h1>REW Listings - Dashboard</h1>
+  <div class="container">
+    <h1>Real Estate Pipeline Dashboard</h1>
 
-  <h2>Listings DB</h2>
-  <p>Total listings in DB: <strong>{{ total }}</strong></p>
+    <!-- Global Summary -->
+    <section class="summary-section">
+      <div class="summary-grid">
+        <div class="card">
+          <div class="card-title">Properties</div>
+          <div class="card-value">{{ total_properties }}</div>
+          <div class="card-note">Canonical property records</div>
+        </div>
+        <div class="card">
+          <div class="card-title">Listings</div>
+          <div class="card-value">{{ total_listings }}</div>
+          <div class="card-note">REW listings in DB</div>
+        </div>
+        <div class="card">
+          <div class="card-title">Sales</div>
+          <div class="card-value">{{ total_sales }}</div>
+          <div class="card-note">Recorded transactions</div>
+        </div>
+        <div class="card">
+          <div class="card-title">Assessments</div>
+          <div class="card-value">{{ total_assessments }}</div>
+          <div class="card-note">BC Assessment & other sources</div>
+        </div>
+        <div class="card">
+          <div class="card-title">Property Characteristics</div>
+          <div class="card-value">{{ total_property_chars }}</div>
+          <div class="card-note">Beds/baths/size snapshots</div>
+        </div>
+        <div class="card">
+          <div class="card-title">Raw Scrapes</div>
+          <div class="card-value">{{ total_raw_scrapes }}</div>
+          <div class="card-note">Raw HTML/JSON payloads</div>
+        </div>
+        <div class="card">
+          <div class="card-title">REW URLs</div>
+          <div class="card-value">{{ total_rew_urls }}</div>
+          <div class="card-note">Discovered listing URLs</div>
+        </div>
+        <div class="card">
+          <div class="card-title">BC Assessment URLs</div>
+          <div class="card-value">{{ total_bca_urls }}</div>
+          <div class="card-note">BC Assessment property pages</div>
+        </div>
+      </div>
+    </section>
 
-  <h2>URL Queue</h2>
-    <ul>
-    <li>Total URLs discovered: <strong>{{ total_urls }}</strong></li>
-    <li>Done (scraped): <strong>{{ done_urls }}</strong></li>
-    <li>Pending (incl. scraping): <strong>{{ pending_urls }}</strong></li>
-    <li>Errors: <strong>{{ error_urls }}</strong></li>
-    <li>
-        Scraped ratio:
-        <strong>
-        {% if total_urls > 0 %}
-            {{ '%.1f' % (scrape_ratio * 100) }}%
-        {% else %}
-            N/A
-        {% endif %}
-        </strong>
-    </li>
-    <li>
+    <!-- REW Scraper Panel -->
+    <section class="panel">
+      <div class="panel-header">
+        <h2>REW Scraper</h2>
+      </div>
+
+      <div class="stats-list">
+        <span>Total URLs discovered: <strong>{{ total_rew_urls }}</strong></span>
+        <span>Done: <strong>{{ rew_done_urls }}</strong></span>
+        <span>Pending: <strong>{{ rew_pending_urls }}</strong></span>
+        <span>Error: <strong>{{ rew_error_urls }}</strong></span>
+        <span>Scraped ratio:
+          <strong>
+            {% if rew_scrape_ratio %}
+              {{ "%.1f" % (rew_scrape_ratio * 100) }}%
+            {% else %}
+              0.0%
+            {% endif %}
+          </strong>
+        </span>
+      </div>
+
+      <p class="muted">
         Latest discovered URL:
-        {% if latest_discovered %}
-        <a href="{{ latest_discovered.url }}" target="_blank">
-            {{ latest_discovered.url }}
-        </a>
-        ({{ latest_discovered.discovered_at }})
+        {% if latest_rew_discovered %}
+          <code>{{ latest_rew_discovered.url }}</code>
         {% else %}
-        None yet
+          None yet
         {% endif %}
-    </li>
-    <li>
+        <br>
         Latest successfully scraped URL:
-        {% if latest_done %}
-        <a href="{{ latest_done.url }}" target="_blank">
-            {{ latest_done.url }}
+        {% if latest_rew_done %}
+          <code>{{ latest_rew_done.url }}</code>
+        {% else %}
+          None yet
+        {% endif %}
+      </p>
+
+      <h3>Latest scraped listings</h3>
+      <table>
+        <tr>
+          <th>Scraped At</th>
+          <th>Address</th>
+          <th>Neighbourhood</th>
+          <th>City</th>
+          <th>Price</th>
+          <th>Beds</th>
+          <th>Baths</th>
+          <th>Size (sqft)</th>
+        </tr>
+        {% for l in latest %}
+        <tr>
+          <td>{{ l.scraped_at }}</td>
+          <td>
+            <a href="{{ request.url_for('listing_detail', listing_id=l.id) }}">
+              {{ l.street_address or "(no address)" }}
+            </a>
+          </td>
+          <td>{{ l.neighbourhood }}</td>
+          <td>{{ l.city }}</td>
+          <td>
+            {% if l.price_cad %}
+              {{ '{:,}'.format(l.price_cad) }}
+            {% else %}
+              -
+            {% endif %}
+          </td>
+          <td>{{ l.beds }}</td>
+          <td>{{ l.baths }}</td>
+          <td>{{ l.sqft }}</td>
+        </tr>
+        {% endfor %}
+      </table>
+
+      <div class="actions">
+        <a href="{{ request.url_for('listings') }}" class="btn-link">
+          Browse listings (table)
         </a>
-        (last attempt: {{ latest_done.last_attempt_at }})
+        <a href="{{ request.url_for('map_view') }}" class="btn-link">
+          View listings on map
+        </a>
+      </div>
+
+    </section>
+
+    <!-- BC Assessment Scraper Panel -->
+    <section class="panel">
+      <div class="panel-header">
+        <h2>BC Assessment Scraper</h2>
+      </div>
+
+      <div class="stats-list">
+        <span>Total URLs discovered: <strong>{{ total_bca_urls }}</strong></span>
+        <span>Done: <strong>{{ bca_done_urls }}</strong></span>
+        <span>Pending: <strong>{{ bca_pending_urls }}</strong></span>
+        <span>Error: <strong>{{ bca_error_urls }}</strong></span>
+        <span>Scraped ratio:
+          <strong>
+            {% if bca_scrape_ratio %}
+              {{ "%.1f" % (bca_scrape_ratio * 100) }}%
+            {% else %}
+              0.0%
+            {% endif %}
+          </strong>
+        </span>
+      </div>
+
+      <p class="muted">
+        Latest discovered BC Assessment URL:
+        {% if latest_bca_discovered %}
+          <code>{{ latest_bca_discovered.url }}</code>
         {% else %}
-        None yet
+          None yet
         {% endif %}
-    </li>
-    </ul>
-
-
-  <h2>Latest scraped listings</h2>
-<table border="1" cellpadding="4">
-    <tr>
-      <th>Scraped At</th>
-      <th>Address</th>
-      <th>Neighbourhood</th>
-      <th>City</th>
-      <th>Price</th>
-      <th>Beds</th>
-      <th>Baths</th>
-      <th>Property Type</th>
-      <th>Size (sqft)</th>
-    </tr>
-    {% for l in latest %}
-    <tr>
-      <td>{{ l.scraped_at }}</td>
-      <td><a href="{{ request.url_for('listing_detail', listing_id=l.id) }}">
-          {{ l.street_address or "(no address)" }}
-        </a></td>
-      <td>{{ l.neighbourhood }}</td>
-      <td>{{ l.city }}</td>
-      <td>
-        {% if l.price_cad %}
-          {{ '{:,}'.format(l.price_cad) }}
+        <br>
+        Latest successfully scraped BC Assessment URL:
+        {% if latest_bca_done %}
+          <code>{{ latest_bca_done.url }}</code>
         {% else %}
-          -
+          None yet
         {% endif %}
-      </td>
-      <td>{{ l.beds }}</td>
-      <td>{{ l.baths }}</td>
-      <td>{{ l.property_type }}</td>
-      <td>{{ l.sqft }}</td>
-    </tr>
-    {% endfor %}
-  </table>
+      </p>
 
-<p>
-  <a href="{{ request.url_for('listings') }}">Browse listings (table)</a>
-  &nbsp;|&nbsp;
-  <a href="{{ request.url_for('map_view') }}">View listings on map</a>
-</p>
-
+      <h3>Latest BC Assessment properties</h3>
+      <table>
+        <tr>
+          <th>As of Date</th>
+          <th>Address</th>
+          <th>Beds</th>
+          <th>Baths</th>
+          <th>Building Sqft</th>
+          <th>Lot Sqft</th>
+          <th>Year Built</th>
+        </tr>
+        {% for char, prop in latest_bca_props %}
+        <tr>
+          <td>{{ char.as_of_date }}</td>
+          <td>
+            {% if prop %}
+              {{ prop.street_address }}, {{ prop.city }}
+            {% else %}
+              (no linked property)
+            {% endif %}
+          </td>
+          <td>{{ char.beds }}</td>
+          <td>{{ char.baths }}</td>
+          <td>{{ char.sqft }}</td>
+          <td>{{ char.lot_sqft }}</td>
+          <td>{{ char.year_built }}</td>
+        </tr>
+        {% endfor %}
+      </table>
+    </section>
+  </div>
 </body>
 </html>
