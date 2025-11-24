@@ -80,6 +80,16 @@ async def get_or_create_property(
     )
     prop = result.scalar_one_or_none()
     if prop:
+        updated = False
+        if prop.lat is None and lat is not None:
+            prop.lat = lat
+            updated = True
+        if prop.lng is None and lng is not None:
+            prop.lng = lng
+            updated = True
+
+        if updated:
+            await session.flush()
         return prop
 
     prop = Property(
