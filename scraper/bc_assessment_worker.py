@@ -3,7 +3,7 @@ import asyncio
 import random
 import logging
 import pathlib
-from datetime import datetime
+from datetime import datetime, date
 
 from logging_config import setup_logging
 from bs4 import BeautifulSoup
@@ -39,6 +39,18 @@ EMPTY_QUEUE_SLEEP_SECONDS = 60
 PER_URL_SLEEP_SECONDS = 1
 PAGE_LOAD_TIMEOUT_SECONDS = 60  # seconds (we pass ms to crawl4ai)
 
+def _json_safe(value):
+    """
+    Recursively convert any date/datetime objects to ISO strings so they can
+    be stored in a JSON/JSONB column.
+    """
+    if isinstance(value, (date, datetime)):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {k: _json_safe(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_json_safe(v) for v in value]
+    return value
 
 async def upsert_property_characteristics(session, prop_id: int, char_data: dict):
     """
@@ -56,7 +68,7 @@ async def upsert_property_characteristics(session, prop_id: int, char_data: dict
         "sqft_unfinished": char_data.get("sqft_unfinished"),
         "lot_sqft": char_data.get("lot_sqft"),
         "year_built": char_data.get("year_built"),
-        "raw_blob": char_data,
+        "raw_blob": _json_safe(char_data),
     }
 
     stmt = pg_insert(PropertyCharacteristics).values(row)
@@ -80,7 +92,7 @@ async def upsert_assessments(session, prop_id: int, assessments: list[dict]):
                 "land_value": a.get("land_value"),
                 "building_value": a.get("building_value"),
                 "source": "bc_assessment",
-                "raw_blob": a,
+                "raw_blob": _json_safe(a),
             }
         )
 
