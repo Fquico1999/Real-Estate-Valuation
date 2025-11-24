@@ -30,6 +30,33 @@ def normalize_address(
     parts = [p for p in [street_n, city_n, prov_n, postal_n] if p]
     return "|".join(parts)
 
+def _format_display_part(s: Optional[str]) -> Optional[str]:
+    """
+    Normalize a street / city string for display:
+      - lowercases
+      - trims
+      - title-cases most words
+      - keeps common directionals (W/E/N/S/NE/NW/SE/SW) uppercased
+    """
+    if not s:
+        return s
+
+    s = s.strip().lower()
+    tokens = s.split()
+
+    DIR = {"n", "s", "e", "w", "ne", "nw", "se", "sw"}
+
+    out: list[str] = []
+    for t in tokens:
+        base = t.rstrip(",")
+        suffix = "," if t.endswith(",") else ""
+
+        if base in DIR:
+            out.append(base.upper() + suffix)
+        else:
+            out.append(base.capitalize() + suffix)
+
+    return " ".join(out)
 
 async def get_or_create_property(
     session: AsyncSession,
@@ -40,7 +67,13 @@ async def get_or_create_property(
     lat: Optional[float] = None,
     lng: Optional[float] = None,
 ) -> Property:
-    canonical = normalize_address(street, city, province, postal_code)
+    # Normalize for display
+    street_fmt = _format_display_part(street)
+    city_fmt = _format_display_part(city)
+    prov_fmt = (province or "").strip().upper()
+    postal_code_fmt = (postal_code or "").upper()
+
+    canonical = normalize_address(street_fmt, city_fmt, prov_fmt, postal_code_fmt)
 
     result = await session.execute(
         select(Property).where(Property.canonical_address == canonical)
@@ -50,10 +83,10 @@ async def get_or_create_property(
         return prop
 
     prop = Property(
-        street_address=street,
-        city=city,
-        province=province,
-        postal_code=postal_code,
+        street_address=street_fmt,
+        city=city_fmt,
+        province=prov_fmt,
+        postal_code=postal_code_fmt,
         lat=lat,
         lng=lng,
         canonical_address=canonical,
