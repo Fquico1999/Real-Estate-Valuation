@@ -157,7 +157,8 @@ async def process_single_listing(crawler: AsyncWebCrawler, session, listing: Rew
           * neighbour URLs -> enqueue into BCAssessmentUrl
     """
 
-    search_str = listing.street_address
+    parts = [listing.street_address, listing.city]
+    search_str = " ".join(parts)
 
     logger.info(
         f"[Listing {listing.id}] Search BC Assessment for: {search_str!r}"
