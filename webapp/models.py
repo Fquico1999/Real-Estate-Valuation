@@ -1,4 +1,4 @@
-# webapp/models.py
+# scraper/models.py
 import os
 from datetime import datetime
 
@@ -26,11 +26,31 @@ DATABASE_URL = os.getenv(
 engine = create_async_engine(DATABASE_URL, echo=False, future=True)
 AsyncSessionLocal = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 Base = declarative_base()
+
 class RewListingUrl(Base):
     __tablename__ = "rew_listing_urls"
 
     id = Column(Integer, primary_key=True)
     url = Column(Text, unique=True, nullable=False)
+    discovered_at = Column(DateTime(timezone=True), server_default=func.now())
+    status = Column(Text, nullable=False, server_default="pending")
+    last_attempt_at = Column(DateTime(timezone=True))
+    attempts = Column(Integer, nullable=False, server_default="0")
+    last_error = Column(Text)
+
+class BCAssessmentUrl(Base):
+    """
+    Queue of BC Assessment property pages to crawl.
+
+    We store fully qualified URLs like:
+      https://www.bcassessment.ca/Property/Info/QTAwMDAwMDFaTA==/
+    plus metadata for worker retries.
+    """
+    __tablename__ = "bc_assessment_urls"
+
+    id = Column(Integer, primary_key=True)
+    url = Column(Text, unique=True, nullable=False)
+    bc_property_id = Column(String(64))  # e.g. 'QTAwMDAwMDFaTA=='
     discovered_at = Column(DateTime(timezone=True), server_default=func.now())
     status = Column(Text, nullable=False, server_default="pending")
     last_attempt_at = Column(DateTime(timezone=True))
@@ -170,4 +190,3 @@ class RewListing(Base):
     __table_args__ = (
         UniqueConstraint("rew_url", name="uq_rew_url"),
     )
-

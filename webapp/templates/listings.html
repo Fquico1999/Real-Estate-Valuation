@@ -2,62 +2,78 @@
 <html>
 <head>
   <title>Browse Listings</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='dashboard.css') }}">
 </head>
 <body>
-  <h1>Browse Listings</h1>
+  <div class="container">
+    <h1>Browse Listings</h1>
+    <p class="page-subtitle">
+      Paginated view of REW listings currently in the database.
+    </p>
 
-  <table border="1" cellpadding="4">
-    <tr>
-      <th>Price</th>
-      <th>Address</th>
-      <th>Neighbourhood</th>
-      <th>City</th>
-      <th>Beds</th>
-      <th>Baths</th>
-      <th>Property Type</th>
-      <th>Sqft</th>
-      <th>Scraped</th>
-    </tr>
-    {% for l in listings %}
-    <tr>
-      <td>
-        {% if l.price_cad %}
-          {{ '{:,}'.format(l.price_cad) }}
-        {% else %}
-          -
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Listings</h2>
+        <div class="panel-subtitle">
+          Page {{ page }} of {{ total_pages }}
+        </div>
+      </div>
+
+      <table>
+        <tr>
+          <th>Price</th>
+          <th>Address</th>
+          <th>Neighbourhood</th>
+          <th>City</th>
+          <th>Beds</th>
+          <th>Baths</th>
+          <th>Property Type</th>
+          <th>Sqft</th>
+          <th>Scraped</th>
+        </tr>
+        {% for l in listings %}
+        <tr>
+          <td>
+            {% if l.price_cad %}
+              {{ '{:,}'.format(l.price_cad) }}
+            {% else %}
+              -
+            {% endif %}
+          </td>
+          <td>
+            <a href="{{ request.url_for('listing_detail', listing_id=l.id) }}">
+              {{ l.street_address or "(no address)" }}
+            </a>
+          </td>
+          <td>{{ l.neighbourhood }}</td>
+          <td>{{ l.city }}</td>
+          <td>{{ l.beds }}</td>
+          <td>{{ l.baths }}</td>
+          <td>{{ l.property_type }}</td>
+          <td>{{ l.sqft }}</td>
+          <td>{{ l.scraped_at }}</td>
+        </tr>
+        {% endfor %}
+      </table>
+
+      <div class="actions">
+        {% if page > 1 %}
+          <a href="{{ url_for('listings') }}?page={{ page - 1 }}" class="btn-link">Prev</a>
         {% endif %}
-      </td>
-      <td>
-        <a href="{{ request.url_for('listing_detail', listing_id=l.id) }}">
-          {{ l.street_address or "(no address)" }}
+        {% if page < total_pages %}
+          <a href="{{ url_for('listings') }}?page={{ page + 1 }}" class="btn-link">Next</a>
+        {% endif %}
+      </div>
+
+      <div class="actions">
+        <a href="{{ request.url_for('map_view') }}" class="btn-link">
+          View these listings on a map
         </a>
-      </td>
-      <td>{{ l.neighbourhood }}</td>
-      <td>{{ l.city }}</td>
-      <td>{{ l.beds }}</td>
-      <td>{{ l.baths }}</td>
-      <td>{{ l.property_type }}</td>
-      <td>{{ l.sqft }}</td>
-      <td>{{ l.scraped_at }}</td>
-    </tr>
-    {% endfor %}
-  </table>
-
-  <p>
-    Page {{ page }} / {{ total_pages }}
-    {% if page > 1 %}
-      <a href="/listings?page={{ page - 1 }}">Prev</a>
-    {% endif %}
-    {% if page < total_pages %}
-      <a href="/listings?page={{ page + 1 }}">Next</a>
-    {% endif %}
-  </p>
-
-  <p>
-    <a href="{{ request.url_for('map_view') }}">View these listings on a map</a>
-    &nbsp;|&nbsp;
-    <a href="{{ request.url_for('home') }}">Back to dashboard</a>
-  </p>
-
+        <a href="{{ request.url_for('home') }}" class="btn-link">
+          Back to dashboard
+        </a>
+      </div>
+    </section>
+  </div>
 </body>
 </html>

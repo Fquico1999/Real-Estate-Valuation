@@ -6,6 +6,7 @@ from collections import defaultdict
 from typing import Optional, Dict, List, Any
 
 from fastapi import FastAPI, Request, HTTPException
+from fastapi.staticfiles import StaticFiles
 from fastapi import Query
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -14,7 +15,17 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import select, func
 
-from models import Base, RewListing, RewListingUrl, Sale, Assessment
+from models import (
+    Base,
+    RewListing,
+    RewListingUrl,
+    Sale,
+    Assessment,
+    Property,
+    PropertyCharacteristics,
+    RawScrape,
+    BCAssessmentUrl,
+)
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
@@ -29,6 +40,8 @@ AsyncSessionLocal = sessionmaker(engine, expire_on_commit=False, class_=AsyncSes
 templates = Jinja2Templates(directory="templates")
 
 app = FastAPI(title="REW Listings Viewer")
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
 
 def parse_int(value: Optional[str]) -> Optional[int]:
     """Convert a query string to int, or None if empty/invalid."""
@@ -171,66 +184,176 @@ async def on_startup():
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     async with AsyncSessionLocal() as session:
-        total_stmt = select(func.count(RewListing.id))
-        total = (await session.execute(total_stmt)).scalar() or 0
+        # --- Global summary -------------------------------------------------
+        total_listings_stmt = select(func.count(RewListing.id))
+        total_listings = (await session.execute(total_listings_stmt)).scalar() or 0
 
+        total_properties = (
+            await session.execute(select(func.count(Property.id)))
+        ).scalar() or 0
+
+        total_sales = (
+            await session.execute(select(func.count(Sale.id)))
+        ).scalar() or 0
+
+        total_assessments = (
+            await session.execute(select(func.count(Assessment.id)))
+        ).scalar() or 0
+
+        total_property_chars = (
+            await session.execute(select(func.count(PropertyCharacteristics.id)))
+        ).scalar() or 0
+
+        total_raw_scrapes = (
+            await session.execute(select(func.count(RawScrape.id)))
+        ).scalar() or 0
+
+        # --- REW scraper panel ----------------------------------------------
         latest_stmt = (
             select(RewListing)
             .order_by(RewListing.scraped_at.desc())
             .limit(10)
         )
         latest = (await session.execute(latest_stmt)).scalars().all()
-        
-        #URL queue stats
-        total_urls_stmt = select(func.count(RewListingUrl.id))
-        total_urls = (await session.execute(total_urls_stmt)).scalar() or 0
 
-        done_urls_stmt = select(func.count(RewListingUrl.id)).where(
+        # URL queue stats for REW
+        total_rew_urls_stmt = select(func.count(RewListingUrl.id))
+        total_rew_urls = (
+            await session.execute(total_rew_urls_stmt)
+        ).scalar() or 0
+
+        rew_done_urls_stmt = select(func.count(RewListingUrl.id)).where(
             RewListingUrl.status == "done"
         )
-        done_urls = (await session.execute(done_urls_stmt)).scalar() or 0
+        rew_done_urls = (
+            await session.execute(rew_done_urls_stmt)
+        ).scalar() or 0
 
-        error_urls_stmt = select(func.count(RewListingUrl.id)).where(
+        rew_error_urls_stmt = select(func.count(RewListingUrl.id)).where(
             RewListingUrl.status == "error"
         )
-        error_urls = (await session.execute(error_urls_stmt)).scalar() or 0
+        rew_error_urls = (
+            await session.execute(rew_error_urls_stmt)
+        ).scalar() or 0
 
-        pending_urls = total_urls - done_urls - error_urls
-        scrape_ratio = (done_urls / total_urls) if total_urls > 0 else 0.0
+        rew_pending_urls = total_rew_urls - rew_done_urls - rew_error_urls
+        rew_scrape_ratio = (
+            rew_done_urls / total_rew_urls if total_rew_urls > 0 else 0.0
+        )
 
-        # Latest discovered URL (any status)
-        latest_discovered_stmt = (
+        # Latest discovered REW URL (any status)
+        latest_rew_discovered_stmt = (
             select(RewListingUrl)
             .order_by(RewListingUrl.discovered_at.desc())
             .limit(1)
         )
-        latest_discovered = (
-            await session.execute(latest_discovered_stmt)
+        latest_rew_discovered = (
+            await session.execute(latest_rew_discovered_stmt)
         ).scalars().first()
 
-        # Latest successfully scraped URL
-        latest_done_stmt = (
+        # Latest successfully scraped REW URL
+        latest_rew_done_stmt = (
             select(RewListingUrl)
             .where(RewListingUrl.status == "done")
             .order_by(RewListingUrl.last_attempt_at.desc().nullslast())
             .limit(1)
         )
-        latest_done = (await session.execute(latest_done_stmt)).scalars().first()
+        latest_rew_done = (
+            await session.execute(latest_rew_done_stmt)
+        ).scalars().first()
+
+        # --- BC Assessment scraper panel ------------------------------------
+        total_bca_urls_stmt = select(func.count(BCAssessmentUrl.id))
+        total_bca_urls = (
+            await session.execute(total_bca_urls_stmt)
+        ).scalar() or 0
+
+        bca_done_urls_stmt = select(func.count(BCAssessmentUrl.id)).where(
+            BCAssessmentUrl.status == "done"
+        )
+        bca_done_urls = (
+            await session.execute(bca_done_urls_stmt)
+        ).scalar() or 0
+
+        bca_error_urls_stmt = select(func.count(BCAssessmentUrl.id)).where(
+            BCAssessmentUrl.status == "error"
+        )
+        bca_error_urls = (
+            await session.execute(bca_error_urls_stmt)
+        ).scalar() or 0
+
+        bca_pending_urls = total_bca_urls - bca_done_urls - bca_error_urls
+        bca_scrape_ratio = (
+            bca_done_urls / total_bca_urls if total_bca_urls > 0 else 0.0
+        )
+
+        latest_bca_discovered_stmt = (
+            select(BCAssessmentUrl)
+            .order_by(BCAssessmentUrl.discovered_at.desc())
+            .limit(1)
+        )
+        latest_bca_discovered = (
+            await session.execute(latest_bca_discovered_stmt)
+        ).scalars().first()
+
+        latest_bca_done_stmt = (
+            select(BCAssessmentUrl)
+            .where(BCAssessmentUrl.status == "done")
+            .order_by(BCAssessmentUrl.last_attempt_at.desc().nullslast())
+            .limit(1)
+        )
+        latest_bca_done = (
+            await session.execute(latest_bca_done_stmt)
+        ).scalars().first()
+
+        # Latest BC Assessment properties (by characteristics)
+        latest_bca_props_stmt = (
+            select(PropertyCharacteristics, Property)
+            .join(Property, Property.id == PropertyCharacteristics.property_id)
+            .where(PropertyCharacteristics.source == "bc_assessment")
+            .order_by(PropertyCharacteristics.as_of_date.desc())
+            .limit(10)
+        )
+        latest_bca_props = (await session.execute(latest_bca_props_stmt)).all()
 
     return templates.TemplateResponse(
         "home.html",
         {
             "request": request,
-            "total": total,
+            # Global summary
+            "total_listings": total_listings,
+            "total_properties": total_properties,
+            "total_sales": total_sales,
+            "total_assessments": total_assessments,
+            "total_property_chars": total_property_chars,
+            "total_raw_scrapes": total_raw_scrapes,
+            "total_rew_urls": total_rew_urls,
+            "total_bca_urls": total_bca_urls,
+            # REW scraper stats
             "latest": latest,
-            # URL stats
-            "total_urls": total_urls,
-            "done_urls": done_urls,
-            "pending_urls": pending_urls,
-            "error_urls": error_urls,
-            "scrape_ratio": scrape_ratio,
-            "latest_discovered": latest_discovered,
-            "latest_done": latest_done,
+            "rew_done_urls": rew_done_urls,
+            "rew_pending_urls": rew_pending_urls,
+            "rew_error_urls": rew_error_urls,
+            "rew_scrape_ratio": rew_scrape_ratio,
+            "latest_rew_discovered": latest_rew_discovered,
+            "latest_rew_done": latest_rew_done,
+            # Backwards-compatible names (if anything else uses them)
+            "total": total_listings,
+            "total_urls": total_rew_urls,
+            "done_urls": rew_done_urls,
+            "pending_urls": rew_pending_urls,
+            "error_urls": rew_error_urls,
+            "scrape_ratio": rew_scrape_ratio,
+            "latest_discovered": latest_rew_discovered,
+            "latest_done": latest_rew_done,
+            # BC Assessment scraper stats
+            "bca_done_urls": bca_done_urls,
+            "bca_pending_urls": bca_pending_urls,
+            "bca_error_urls": bca_error_urls,
+            "bca_scrape_ratio": bca_scrape_ratio,
+            "latest_bca_discovered": latest_bca_discovered,
+            "latest_bca_done": latest_bca_done,
+            "latest_bca_props": latest_bca_props,
         },
     )
 
