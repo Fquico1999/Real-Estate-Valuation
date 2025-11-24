@@ -11,7 +11,7 @@
     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
     crossorigin=""
   />
-    <!-- Leaflet MarkerCluster CSS -->
+  <!-- Leaflet MarkerCluster CSS -->
   <link
     rel="stylesheet"
     href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"
@@ -22,67 +22,279 @@
   />
 
   <style>
+    * {
+      box-sizing: border-box;
+    }
+    
     body {
       font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
       margin: 0;
       padding: 0;
     }
+    
     .top-bar {
       padding: 0.75rem 1rem;
       border-bottom: 1px solid #ddd;
       display: flex;
       align-items: center;
       justify-content: space-between;
+      background: white;
+      z-index: 1000;
     }
+    
     .top-bar a {
       text-decoration: none;
       color: #0070f3;
     }
-    .filters-bar {
-      padding: 0.5rem 1rem;
-      border-bottom: 1px solid #eee;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      align-items: center;
+    
+    .filters-container {
       background: #fafafa;
-      font-size: 0.9rem;
+      border-bottom: 1px solid #eee;
+      max-height: 70vh;
+      overflow-y: auto;
+      transition: max-height 0.3s ease;
     }
-    .filters-bar label {
+    
+    .filters-container.collapsed {
+      max-height: 0;
+      overflow: hidden;
+    }
+    
+    .filters-toggle {
+      padding: 0.75rem 1rem;
+      background: white;
+      border-bottom: 1px solid #eee;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-weight: 500;
+    }
+    
+    .filters-toggle:hover {
+      background: #f5f5f5;
+    }
+    
+    .toggle-icon {
+      transition: transform 0.3s ease;
+    }
+    
+    .toggle-icon.rotated {
+      transform: rotate(180deg);
+    }
+    
+    .filters-form {
+      padding: 1rem;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 1rem;
+    }
+    
+    .filter-group {
       display: flex;
       flex-direction: column;
+      gap: 0.5rem;
+    }
+    
+    .filter-group label {
       font-size: 0.75rem;
       text-transform: uppercase;
       letter-spacing: 0.03em;
       color: #555;
+      font-weight: 600;
     }
-    .filters-bar input {
-      padding: 0.25rem 0.4rem;
+    
+    .filter-group input[type="number"],
+    .filter-group input[type="text"],
+    .filter-group select {
+      padding: 0.5rem;
       font-size: 0.9rem;
-      min-width: 6rem;
-    }
-    .filters-bar button {
-      padding: 0.4rem 0.8rem;
-      font-size: 0.9rem;
+      border: 1px solid #ddd;
       border-radius: 4px;
-      border: 1px solid #0070f3;
+      background: white;
+    }
+    
+    .filter-group input:focus,
+    .filter-group select:focus {
+      outline: none;
+      border-color: #0070f3;
+    }
+    
+    .range-display {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+    
+    .range-display input {
+      flex: 1;
+    }
+    
+    .range-display span {
+      color: #666;
+      font-size: 0.9rem;
+    }
+    
+    .slider-container {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+    
+    .slider-value {
+      font-size: 0.85rem;
+      color: #666;
+      text-align: right;
+    }
+    
+    input[type="range"] {
+      width: 100%;
+      height: 6px;
+      background: #ddd;
+      border-radius: 3px;
+      outline: none;
+      -webkit-appearance: none;
+    }
+    
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 18px;
+      height: 18px;
       background: #0070f3;
-      color: white;
+      cursor: pointer;
+      border-radius: 50%;
+    }
+    
+    input[type="range"]::-moz-range-thumb {
+      width: 18px;
+      height: 18px;
+      background: #0070f3;
+      cursor: pointer;
+      border-radius: 50%;
+      border: none;
+    }
+    
+    .checkbox-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-top: 0.25rem;
+    }
+    
+    .checkbox-item {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+    
+    .checkbox-item input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
       cursor: pointer;
     }
-    .filters-bar button.secondary {
+    
+    .checkbox-item label {
+      font-size: 0.9rem;
+      color: #333;
+      cursor: pointer;
+      text-transform: none;
+      letter-spacing: normal;
+      font-weight: normal;
+    }
+    
+    .button-group {
+      grid-column: 1 / -1;
+      display: flex;
+      gap: 0.5rem;
+      justify-content: flex-end;
+      margin-top: 0.5rem;
+    }
+    
+    button {
+      padding: 0.5rem 1.25rem;
+      font-size: 0.9rem;
+      border-radius: 4px;
+      border: 1px solid;
+      cursor: pointer;
+      font-weight: 500;
+      transition: all 0.2s ease;
+    }
+    
+    button[type="submit"] {
+      border-color: #0070f3;
+      background: #0070f3;
+      color: white;
+    }
+    
+    button[type="submit"]:hover {
+      background: #0051cc;
+      border-color: #0051cc;
+    }
+    
+    button[type="button"] {
       border-color: #ccc;
       background: white;
       color: #333;
-      margin-left: 0.25rem;
     }
+    
+    button[type="button"]:hover {
+      background: #f5f5f5;
+    }
+    
+    .active-filters {
+      padding: 0.5rem 1rem;
+      background: #e3f2fd;
+      border-bottom: 1px solid #90caf9;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+      font-size: 0.85rem;
+    }
+    
+    .active-filters.hidden {
+      display: none;
+    }
+    
+    .filter-tag {
+      background: white;
+      padding: 0.25rem 0.75rem;
+      border-radius: 12px;
+      border: 1px solid #90caf9;
+      color: #1976d2;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    
+    .filter-tag button {
+      background: none;
+      border: none;
+      color: #1976d2;
+      cursor: pointer;
+      padding: 0;
+      font-size: 1rem;
+      line-height: 1;
+      margin: 0;
+    }
+    
     #map {
-      height: calc(100vh - 48px - 46px); /* top bar + filters bar */
+      height: calc(100vh - 48px);
       width: 100%;
     }
-    @media (max-width: 600px) {
-      #map {
-        height: calc(100vh - 48px - 72px);
+    
+    @media (max-width: 768px) {
+      .filters-form {
+        grid-template-columns: 1fr;
+      }
+      
+      .button-group {
+        flex-direction: column;
+      }
+      
+      button {
+        width: 100%;
       }
     }
   </style>
@@ -98,64 +310,167 @@
       <a href="{{ request.url_for('home') }}">Dashboard</a>
     </div>
   </div>
-  <!-- Filters -->
-  <form class="filters-bar" method="get" action="{{ request.url_for('map_view') }}">
-    <label>
-      Min Price
-      <input
-        type="number"
-        name="min_price"
-        min="0"
-        step="50000"
-        value="{{ min_price if min_price is not none else '' }}"
-        placeholder="e.g. 800000"
-      />
-    </label>
-    <label>
-      Max Price
-      <input
-        type="number"
-        name="max_price"
-        min="0"
-        step="50000"
-        value="{{ max_price if max_price is not none else '' }}"
-        placeholder="e.g. 1500000"
-      />
-    </label>
-    <label>
-      Min Beds
-      <input
-        type="number"
-        name="min_beds"
-        min="0"
-        step="1"
-        value="{{ min_beds if min_beds is not none else '' }}"
-        placeholder="e.g. 2"
-      />
-    </label>
-    <label>
-      Min Baths
-      <input
-        type="number"
-        name="min_baths"
-        min="0"
-        step="1"
-        value="{{ min_baths if min_baths is not none else '' }}"
-        placeholder="e.g. 2"
-      />
-    </label>
 
-    <div>
-      <button type="submit">Apply</button>
-      <button
-        type="button"
-        class="secondary"
-        onclick="window.location='{{ request.url_for('map_view') }}'"
-      >
-        Reset
-      </button>
-    </div>
-  </form>
+  <!-- Filters Toggle -->
+  <div class="filters-toggle" onclick="toggleFilters()">
+    <span>🔍 Filters & Search</span>
+    <span class="toggle-icon" id="toggleIcon">▼</span>
+  </div>
+
+  <!-- Active Filters Display -->
+  <div class="active-filters hidden" id="activeFilters">
+    <strong>Active Filters:</strong>
+    <div id="filterTags"></div>
+  </div>
+
+  <!-- Filters Container -->
+  <div class="filters-container" id="filtersContainer">
+    <form class="filters-form" method="get" action="{{ request.url_for('map_view') }}" id="filterForm">
+      
+      <!-- Price Range -->
+      <div class="filter-group">
+        <label>Price Range</label>
+        <div class="range-display">
+          <input
+            type="number"
+            name="min_price"
+            placeholder="Min"
+            value="{{ min_price if min_price is not none else '' }}"
+            step="50000"
+          />
+          <span>—</span>
+          <input
+            type="number"
+            name="max_price"
+            placeholder="Max"
+            value="{{ max_price if max_price is not none else '' }}"
+            step="50000"
+          />
+        </div>
+      </div>
+
+      <!-- Bedrooms -->
+      <div class="filter-group">
+        <label>Bedrooms</label>
+        <select name="min_beds">
+          <option value="">Any</option>
+          <option value="1" {{ 'selected' if min_beds == '1' else '' }}>1+</option>
+          <option value="2" {{ 'selected' if min_beds == '2' else '' }}>2+</option>
+          <option value="3" {{ 'selected' if min_beds == '3' else '' }}>3+</option>
+          <option value="4" {{ 'selected' if min_beds == '4' else '' }}>4+</option>
+          <option value="5" {{ 'selected' if min_beds == '5' else '' }}>5+</option>
+        </select>
+      </div>
+
+      <!-- Bathrooms -->
+      <div class="filter-group">
+        <label>Bathrooms</label>
+        <select name="min_baths">
+          <option value="">Any</option>
+          <option value="1" {{ 'selected' if min_baths == '1' else '' }}>1+</option>
+          <option value="2" {{ 'selected' if min_baths == '2' else '' }}>2+</option>
+          <option value="3" {{ 'selected' if min_baths == '3' else '' }}>3+</option>
+          <option value="4" {{ 'selected' if min_baths == '4' else '' }}>4+</option>
+        </select>
+      </div>
+
+      <!-- Square Footage -->
+      <div class="filter-group">
+        <label>Square Footage</label>
+        <div class="range-display">
+          <input
+            type="number"
+            name="min_sqft"
+            placeholder="Min"
+            value="{{ min_sqft if min_sqft is not none else '' }}"
+            step="100"
+          />
+          <span>—</span>
+          <input
+            type="number"
+            name="max_sqft"
+            placeholder="Max"
+            value="{{ max_sqft if max_sqft is not none else '' }}"
+            step="100"
+          />
+        </div>
+      </div>
+
+      <!-- Property Type -->
+      <div class="filter-group">
+        <label>Property Type</label>
+        <div class="checkbox-group">
+          <div class="checkbox-item">
+            <input type="checkbox" id="type_condo" name="property_type" value="Apartment/Condo"
+              {{ 'checked' if 'Apartment/Condo' in property_types else '' }}>
+            <label for="type_condo">Condo</label>
+          </div>
+          <div class="checkbox-item">
+            <input type="checkbox" id="type_house" name="property_type" value="House"
+              {{ 'checked' if 'House' in property_types else '' }}>
+            <label for="type_house">House</label>
+          </div>
+          <div class="checkbox-item">
+            <input type="checkbox" id="type_townhouse" name="property_type" value="Townhouse"
+              {{ 'checked' if 'Townhouse' in property_types else '' }}>
+            <label for="type_townhouse">Townhouse</label>
+          </div>
+          <div class="checkbox-item">
+            <input type="checkbox" id="type_duplex" name="property_type" value="Duplex"
+              {{ 'checked' if 'Duplex' in property_types else '' }}>
+            <label for="type_duplex">Duplex</label>
+          </div>
+        </div>
+      </div>
+
+      <!-- City Filter -->
+      <div class="filter-group">
+        <label>City</label>
+        <input
+          type="text"
+          name="city"
+          placeholder="e.g., Vancouver, Burnaby..."
+          value="{{ city if city else '' }}"
+        />
+      </div>
+
+      <!-- Neighbourhood Filter -->
+      <div class="filter-group">
+        <label>Neighbourhood</label>
+        <input
+          type="text"
+          name="neighbourhood"
+          placeholder="e.g., Kitsilano, Metrotown..."
+          value="{{ neighbourhood if neighbourhood else '' }}"
+        />
+      </div>
+
+      <!-- Days on Market -->
+      <div class="filter-group">
+        <label>Days on Market</label>
+        <div class="slider-container">
+          <input
+            type="range"
+            name="max_days"
+            min="0"
+            max="365"
+            step="1"
+            value="{{ max_days if max_days is not none else '365' }}"
+            oninput="updateSliderValue(this)"
+          />
+          <div class="slider-value">
+            Max: <span id="maxDaysValue">{{ max_days if max_days is not none else '365' }}</span> days
+          </div>
+        </div>
+      </div>
+
+      <!-- Button Group -->
+      <div class="button-group">
+        <button type="button" onclick="resetFilters()">Clear All</button>
+        <button type="submit">Apply Filters</button>
+      </div>
+    </form>
+  </div>
 
   <div id="map"></div>
 
@@ -170,79 +485,165 @@
     src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"
   ></script>
 
-
   <script>
+    // Toggle filters visibility
+    function toggleFilters() {
+      const container = document.getElementById('filtersContainer');
+      const icon = document.getElementById('toggleIcon');
+      container.classList.toggle('collapsed');
+      icon.classList.toggle('rotated');
+    }
+
+    // Update slider value display
+    function updateSliderValue(slider) {
+      const valueDisplay = document.getElementById('maxDaysValue');
+      valueDisplay.textContent = slider.value;
+    }
+
+    // Reset all filters
+    function resetFilters() {
+      window.location = '{{ request.url_for("map_view") }}';
+    }
+
+    // Show active filters
+    function displayActiveFilters() {
+      const params = new URLSearchParams(window.location.search);
+      const activeFiltersDiv = document.getElementById('activeFilters');
+      const filterTagsDiv = document.getElementById('filterTags');
+      
+      filterTagsDiv.innerHTML = '';
+      let hasFilters = false;
+
+      const filterLabels = {
+        'min_price': 'Min Price',
+        'max_price': 'Max Price',
+        'min_beds': 'Min Beds',
+        'min_baths': 'Min Baths',
+        'min_sqft': 'Min Sqft',
+        'max_sqft': 'Max Sqft',
+        'city': 'City',
+        'neighbourhood': 'Neighbourhood',
+        'max_days': 'Max Days'
+      };
+
+      // Handle regular filters
+      for (const [key, value] of params.entries()) {
+        if (key !== 'property_type' && value && value.trim() !== '') {
+          hasFilters = true;
+          const tag = document.createElement('div');
+          tag.className = 'filter-tag';
+          tag.innerHTML = `
+            ${filterLabels[key] || key}: <strong>${value}</strong>
+            <button onclick="removeFilter('${key}')" title="Remove filter">×</button>
+          `;
+          filterTagsDiv.appendChild(tag);
+        }
+      }
+
+      // Handle property type checkboxes
+      const propertyTypes = params.getAll('property_type');
+      if (propertyTypes.length > 0) {
+        hasFilters = true;
+        propertyTypes.forEach(type => {
+          const tag = document.createElement('div');
+          tag.className = 'filter-tag';
+          tag.innerHTML = `
+            Type: <strong>${type}</strong>
+            <button onclick="removePropertyType('${type}')" title="Remove filter">×</button>
+          `;
+          filterTagsDiv.appendChild(tag);
+        });
+      }
+
+      if (hasFilters) {
+        activeFiltersDiv.classList.remove('hidden');
+      } else {
+        activeFiltersDiv.classList.add('hidden');
+      }
+    }
+
+    // Remove a single filter
+    function removeFilter(key) {
+      const url = new URL(window.location);
+      url.searchParams.delete(key);
+      window.location = url.toString();
+    }
+
+    // Remove a property type filter
+    function removePropertyType(type) {
+      const url = new URL(window.location);
+      const types = url.searchParams.getAll('property_type');
+      url.searchParams.delete('property_type');
+      types.filter(t => t !== type).forEach(t => {
+        url.searchParams.append('property_type', t);
+      });
+      window.location = url.toString();
+    }
+
+    // Initialize active filters display
+    displayActiveFilters();
+
     // Data from backend
     const listingPoints = {{ listing_points | tojson }};
-
-    // Listing ID to focus (if any)
     const focusId = {{ focus_id if focus_id is not none else 'null' }};
 
-    // Default center (Vancouver-ish) if no data:
+    // Default center (Vancouver)
     let defaultCenter = [49.2827, -123.1207];
     if (listingPoints.length > 0) {
-      // Start at the first listing; we'll also fit bounds below
       defaultCenter = [listingPoints[0].lat, listingPoints[0].lng];
     }
 
     // Initialize map
     const map = L.map("map").setView(defaultCenter, 12);
 
-    // Base tile layer from OpenStreetMap
+    // Base tile layer
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(map);
 
-    // Create a marker cluster group
+    // Create marker cluster group
     const clusterGroup = L.markerClusterGroup();
-
-    // Keep a lookup from listing id -> marker
     const markerById = new Map();
 
     listingPoints.forEach((item) => {
-        if (item.lat == null || item.lng == null) return;
+      if (item.lat == null || item.lng == null) return;
 
-        const price = item.price
+      const price = item.price
         ? "$" + item.price.toLocaleString()
         : "Price unknown";
-    
-        // Build a compact "3 bd • 2 ba • 1,234 sqft" line
-        const detailsParts = [];
-        if (item.beds != null) detailsParts.push(`${item.beds} bd`);
-        if (item.baths != null) detailsParts.push(`${item.baths} ba`);
-        if (item.sqft != null) detailsParts.push(`${item.sqft.toLocaleString()} sqft`);
-        const detailsLine = detailsParts.join(" • ");
+      
+      const detailsParts = [];
+      if (item.beds != null) detailsParts.push(`${item.beds} bd`);
+      if (item.baths != null) detailsParts.push(`${item.baths} ba`);
+      if (item.sqft != null) detailsParts.push(`${item.sqft.toLocaleString()} sqft`);
+      const detailsLine = detailsParts.join(" • ");
 
-        const popupHtml = `
-            <div>
-                <strong>${price}</strong><br/>
-                ${detailsLine ? detailsLine + "<br/>" : ""}
-                ${item.address ? item.address : "No address"}<br/>
-                ${item.city || ""} ${item.neighbourhood || ""}<br/>
-                ${item.url ? `<a href="${item.url}" target="_blank" rel="noopener noreferrer">View on REW</a>` : ""}
-                <br/>
-                ${item.detail_url ? `<a href="${item.detail_url}">View details</a>` : ""}
-            </div>
-            `;
+      const popupHtml = `
+        <div style="min-width: 200px;">
+          <strong style="font-size: 1.1em;">${price}</strong><br/>
+          ${detailsLine ? detailsLine + "<br/>" : ""}
+          ${item.address ? item.address + "<br/>" : "No address<br/>"}
+          ${item.city || ""} ${item.neighbourhood || ""}<br/>
+          ${item.url ? `<a href="${item.url}" target="_blank" rel="noopener noreferrer">View on REW</a><br/>` : ""}
+          ${item.detail_url ? `<a href="${item.detail_url}">View details</a>` : ""}
+        </div>
+      `;
 
-        const marker = L.marker([item.lat, item.lng]).bindPopup(popupHtml);
-        const label = `${price} – ${item.city || ""} ${item.neighbourhood || ""}`.trim();
-        marker.bindTooltip(label, { direction: "top" });
+      const marker = L.marker([item.lat, item.lng]).bindPopup(popupHtml);
+      const label = `${price} – ${item.city || ""} ${item.neighbourhood || ""}`.trim();
+      marker.bindTooltip(label, { direction: "top" });
 
-        // Add marker to the cluster group instead of directly to the map
-        clusterGroup.addLayer(marker);
-        markerById.set(item.id, marker);
+      clusterGroup.addLayer(marker);
+      markerById.set(item.id, marker);
     });
 
-    // Add the cluster group to the map
     map.addLayer(clusterGroup);
 
-    // Fit bounds for all clustered markers
     if (clusterGroup.getLayers().length > 0) {
       map.fitBounds(clusterGroup.getBounds().pad(0.2));
     }
-    // If a focusId was provided, zoom to that marker and open its popup
+
     if (focusId !== null) {
       const targetMarker = markerById.get(focusId);
       if (targetMarker) {

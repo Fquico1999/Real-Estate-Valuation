@@ -317,39 +317,76 @@ async def map_view(
     max_price: Optional[str] = Query(default=None),
     min_beds: Optional[str] = Query(default=None),
     min_baths: Optional[str] = Query(default=None),
+    min_sqft: Optional[str] = Query(default=None),
+    max_sqft: Optional[str] = Query(default=None),
+    property_type: Optional[List[str]] = Query(default=None),
+    city: Optional[str] = Query(default=None),
+    neighbourhood: Optional[str] = Query(default=None),
+    max_days: Optional[str] = Query(default=None),
     focus_id: Optional[int] = Query(default=None),
-    ):
-
+):
+    """
+    Enhanced map view with comprehensive filtering options.
+    """
     # Safely parse query params to ints
     min_price_int = parse_int(min_price)
     max_price_int = parse_int(max_price)
     min_beds_int = parse_int(min_beds)
     min_baths_int = parse_int(min_baths)
+    min_sqft_int = parse_int(min_sqft)
+    max_sqft_int = parse_int(max_sqft)
+    max_days_int = parse_int(max_days)
 
     async with AsyncSessionLocal() as session:
         stmt = (
             select(RewListing)
             .where(RewListing.lat.isnot(None), RewListing.lng.isnot(None))
-            )
-        # Apply filters if provided
+        )
+        
+        # Apply price filters
         if min_price_int is not None:
             stmt = stmt.where(RewListing.price_cad >= min_price_int)
         if max_price_int is not None:
             stmt = stmt.where(RewListing.price_cad <= max_price_int)
+        
+        # Apply bedroom/bathroom filters
         if min_beds_int is not None:
             stmt = stmt.where(RewListing.beds >= min_beds_int)
         if min_baths_int is not None:
             stmt = stmt.where(RewListing.baths >= min_baths_int)
+        
+        # Apply square footage filters
+        if min_sqft_int is not None:
+            stmt = stmt.where(RewListing.sqft >= min_sqft_int)
+        if max_sqft_int is not None:
+            stmt = stmt.where(RewListing.sqft <= max_sqft_int)
+        
+        # Apply property type filter
+        if property_type and len(property_type) > 0:
+            # Filter for any of the selected property types
+            stmt = stmt.where(RewListing.property_type.in_(property_type))
+        
+        # Apply city filter (case-insensitive partial match)
+        if city and city.strip():
+            stmt = stmt.where(RewListing.city.ilike(f"%{city.strip()}%"))
+        
+        # Apply neighbourhood filter (case-insensitive partial match)
+        if neighbourhood and neighbourhood.strip():
+            stmt = stmt.where(RewListing.neighbourhood.ilike(f"%{neighbourhood.strip()}%"))
+        
+        # Apply days on market filter
+        if max_days_int is not None:
+            stmt = stmt.where(RewListing.days_on_rew <= max_days_int)
 
         stmt = (
             stmt
             .order_by(RewListing.scraped_at.desc())
-            .limit(2000)  # hardcoded cap. To be replaced by dynamic loading later.
+            .limit(2000)  # hardcoded cap for performance
         )
 
         rows = (await session.execute(stmt)).scalars().all()
 
-    # Convert to a simple list of dicts for JSON use in the template
+    # Convert to JSON-friendly list
     listing_points = [
         {
             "id": l.id,
@@ -378,7 +415,12 @@ async def map_view(
             "max_price": max_price,
             "min_beds": min_beds,
             "min_baths": min_baths,
+            "min_sqft": min_sqft,
+            "max_sqft": max_sqft,
+            "property_types": property_type or [],
+            "city": city,
+            "neighbourhood": neighbourhood,
+            "max_days": max_days,
             "focus_id": focus_id,
         },
     )
-
