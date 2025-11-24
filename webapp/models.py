@@ -122,6 +122,7 @@ class PropertyCharacteristics(Base):
     lot_sqft = Column(Integer)
     year_built = Column(Integer)
     raw_blob = Column(JSON)
+    scraped_at = Column(DateTime(timezone=True), server_default=func.now())
     __table_args__ = (
         UniqueConstraint("property_id", "as_of_date", "source"),
     )

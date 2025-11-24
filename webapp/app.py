@@ -311,9 +311,13 @@ async def home(request: Request):
             select(PropertyCharacteristics, Property)
             .join(Property, Property.id == PropertyCharacteristics.property_id)
             .where(PropertyCharacteristics.source == "bc_assessment")
-            .order_by(PropertyCharacteristics.as_of_date.desc())
+            .order_by(
+                PropertyCharacteristics.scraped_at.desc().nullslast(),
+                PropertyCharacteristics.id.desc(),
+            )
             .limit(10)
         )
+
         latest_bca_props = (await session.execute(latest_bca_props_stmt)).all()
 
     return templates.TemplateResponse(

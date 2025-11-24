@@ -180,17 +180,18 @@
       <h3>Latest BC Assessment properties</h3>
       <table>
         <tr>
-          <th>As of Date</th>
+          <th>Scraped At</th>
           <th>Address</th>
           <th>Beds</th>
           <th>Baths</th>
           <th>Building Sqft</th>
           <th>Lot Sqft</th>
           <th>Year Built</th>
+          <th>As of Date</th>
         </tr>
         {% for char, prop in latest_bca_props %}
         <tr>
-          <td>{{ char.as_of_date }}</td>
+          <td>{{ char.scraped_at }}</td>
           <td>
             {% if prop %}
               {{ prop.street_address }}, {{ prop.city }}
@@ -200,9 +201,18 @@
           </td>
           <td>{{ char.beds }}</td>
           <td>{{ char.baths }}</td>
-          <td>{{ char.sqft }}</td>
+          <td>
+            {% if char.sqft_finished %}
+              {{ char.sqft_finished }}
+            {% elif char.sqft_unfinished %}
+              {{ char.sqft_unfinished }}
+            {% else %}
+              –
+            {% endif %}
+          </td>
           <td>{{ char.lot_sqft }}</td>
           <td>{{ char.year_built }}</td>
+          <td>{{ char.as_of_date }}</td>
         </tr>
         {% endfor %}
       </table>

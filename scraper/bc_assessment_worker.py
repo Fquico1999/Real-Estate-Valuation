@@ -69,6 +69,7 @@ async def upsert_property_characteristics(session, prop_id: int, char_data: dict
         "lot_sqft": char_data.get("lot_sqft"),
         "year_built": char_data.get("year_built"),
         "raw_blob": _json_safe(char_data),
+        "scraped_at": datetime.utcnow(),
     }
 
     stmt = pg_insert(PropertyCharacteristics).values(row)

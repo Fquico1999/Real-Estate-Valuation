@@ -168,6 +168,7 @@ async def scrape_listing_detail(crawler: AsyncWebCrawler, session, url: str):
         sqft_finished=data.get("sqft"),
         lot_sqft=data.get("lot_sqft"),
         raw_blob=data,
+        scraped_at=datetime.utcnow(),
     )
     logger.info("Creating Structural Snapshot...")
     session.add(pc)
