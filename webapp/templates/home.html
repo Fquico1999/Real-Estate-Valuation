@@ -194,7 +194,9 @@
           <td>{{ char.scraped_at }}</td>
           <td>
             {% if prop %}
-              {{ prop.street_address }}, {{ prop.city }}
+              <a href="{{ request.url_for('property_detail', property_id=prop.id) }}">
+                {{ prop.street_address }}, {{ prop.city }}
+              </a>
             {% else %}
               (no linked property)
             {% endif %}

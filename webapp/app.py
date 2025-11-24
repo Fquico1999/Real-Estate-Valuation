@@ -4,6 +4,7 @@ import json
 from collections import defaultdict
 
 from typing import Optional, Dict, List, Any
+from datetime import datetime, date
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.staticfiles import StaticFiles
@@ -33,7 +34,8 @@ DATABASE_URL = os.getenv(
 )
 
 PREFERRED_ASSESSMENT_SOURCES: List[str] = ["bc_assessment", "rew_graphql"]
-PREFERRED_SALE_SOURCES: List[str] = ["land_title", "mls", "rew_graphql"]
+PREFERRED_SALE_SOURCES: List[str] = ["land_title", "mls", "rew_graphql", "bc_assessment"]
+PREFERRED_CHARACTERISTICS_SOURCES: List[str] = ["rew_graphql", "bc_assessment", "mls"]
 
 engine = create_async_engine(DATABASE_URL, echo=False, future=True)
 AsyncSessionLocal = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
@@ -146,6 +148,58 @@ def merge_sales(sales: List[Sale]) -> List[Dict[str, Any]]:
     return merged_rows
 
 
+def merge_property_characteristics(chars: List[PropertyCharacteristics]) -> List[Dict[str, Any]]:
+    """
+    Merge property characteristics by (property_id, as_of_date), preferring
+    more trusted sources for each snapshot, just like merge_assessments does
+    per assessment_year.
+
+    Output is ordered by as_of_date desc.
+    """
+    if not chars:
+        return []
+
+    # group all rows by as_of_date (similar idea to year in assessments)
+    by_date: Dict[date, List[PropertyCharacteristics]] = defaultdict(list)
+    for c in chars:
+        by_date[c.as_of_date].append(c)
+
+    merged_rows: List[Dict[str, Any]] = []
+
+    for as_of, rows in by_date.items():
+        # pick primary source for this snapshot
+        rows_sorted = sorted(
+            rows,
+            key=lambda r: _pick_primary_source(
+                r.source, PREFERRED_CHARACTERISTICS_SOURCES
+            ),
+        )
+        primary = rows_sorted[0]
+
+        # you can choose which fields to surface; these mirror the model
+        merged_rows.append(
+            {
+                "as_of_date": as_of,
+                "beds": primary.beds,
+                "baths": primary.baths,
+                "sqft_finished": primary.sqft_finished,
+                "sqft_unfinished": primary.sqft_unfinished,
+                "lot_sqft": primary.lot_sqft,
+                "year_built": primary.year_built,
+                "primary_source": primary.source,
+                "all_sources": [r.source for r in rows],
+                # optional: capture “freshness” if you have scraped_at
+                "latest_scraped_at": max(
+                    (getattr(r, "scraped_at", None) for r in rows),
+                    default=None,
+                ),
+            }
+        )
+
+    # sort by as_of_date desc (same pattern as merge_assessments sorts by year)
+    merged_rows.sort(key=lambda r: r["as_of_date"], reverse=True)
+    return merged_rows
+
 def group_assessments_by_source(assessments: List[Assessment]) -> Dict[str, List[Assessment]]:
     """
     Return {source: [Assessment, ...]} sorted by year desc.
@@ -170,6 +224,23 @@ def group_sales_by_source(sales: List[Sale]) -> Dict[str, List[Sale]]:
 
     for rows in by_source.values():
         rows.sort(key=lambda s: s.sale_date, reverse=True)
+
+    return dict(by_source)
+
+
+def group_characteristics_by_source(chars: List[PropertyCharacteristics]) -> Dict[str, List[PropertyCharacteristics]]:
+    """
+    Return {source: [PropertyCharacteristics, ...]} sorted by as_of_date desc.
+
+    This mirrors group_assessments_by_source (sorted by year) and
+    group_sales_by_source (sorted by sale_date).
+    """
+    by_source: Dict[str, List[PropertyCharacteristics]] = defaultdict(list)
+    for c in chars:
+        by_source[c.source].append(c)
+
+    for rows in by_source.values():
+        rows.sort(key=lambda c: c.as_of_date, reverse=True)
 
     return dict(by_source)
 
@@ -436,6 +507,76 @@ async def listing_detail(request: Request, listing_id: int):
             "raw_sales_by_source": raw_sales_by_source
         },
     )
+
+
+@app.get("/properties/{property_id}", response_class=HTMLResponse)
+async def property_detail(request: Request, property_id: int):
+    async with AsyncSessionLocal() as session:
+        # 1) Load Property
+        prop_result = await session.execute(
+            select(Property).where(Property.id == property_id)
+        )
+        prop = prop_result.scalar_one_or_none()
+        if prop is None:
+            raise HTTPException(status_code=404, detail="Property not found")
+
+        # 2) All REW listings for this property (active + history), newest scrape first
+        listings_result = await session.execute(
+            select(RewListing)
+            .where(RewListing.property_id == property_id)
+            .order_by(RewListing.scraped_at.desc().nullslast())
+        )
+        listings: List[RewListing] = listings_result.scalars().all()
+
+        active_listing = listings[0] if listings else None
+
+        # 3) Assessments & sales (same as listing_detail, but property-centric)
+        assessments_result = await session.execute(
+            select(Assessment).where(Assessment.property_id == property_id)
+        )
+        assessments = assessments_result.scalars().all()
+
+        sales_result = await session.execute(
+            select(Sale).where(Sale.property_id == property_id)
+        )
+        sales = sales_result.scalars().all()
+
+        merged_assessments = merge_assessments(assessments)
+        merged_sales = merge_sales(sales)
+        raw_assessments_by_source = group_assessments_by_source(assessments)
+        raw_sales_by_source = group_sales_by_source(sales)
+
+        # 4) PropertyCharacteristics
+        chars_result = await session.execute(
+            select(PropertyCharacteristics)
+            .where(PropertyCharacteristics.property_id == property_id)
+            .order_by(PropertyCharacteristics.scraped_at.desc().nullslast())
+        )
+        chars = chars_result.scalars().all()
+
+        merged_chars = merge_property_characteristics(chars)
+        raw_chars_by_source = group_characteristics_by_source(chars)
+
+        # “Current” snapshot for the hero – newest as_of_date (merged list is already sorted desc)
+        current_char = merged_chars[0] if merged_chars else None
+
+    return templates.TemplateResponse(
+        "property_detail.html",
+        {
+            "request": request,
+            "property": prop,
+            "active_listing": active_listing,
+            "listings": listings,
+            "merged_assessments": merged_assessments,
+            "merged_sales": merged_sales,
+            "raw_assessments_by_source": raw_assessments_by_source,
+            "raw_sales_by_source": raw_sales_by_source,
+            "merged_chars": merged_chars,
+            "raw_chars_by_source": raw_chars_by_source,
+            "current_char": current_char,
+        }
+    )
+
 
 @app.get("/map", response_class=HTMLResponse)
 async def map_view( 

@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>
+      Property – {{ property.street_address }}, {{ property.city }}
+    </title>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', path='/dashboard.css') }}?v=1"
+    />
+  </head>
+  <body>
+    <div class="container">
+
+      <!-- HERO -->
+      <section class="panel hero-panel">
+        <div class="hero-top-row">
+          <a href="{{ request.url_for('home') }}" class="btn-link">
+            &larr; Back to dashboard
+          </a>
+        </div>
+
+        <div class="hero-main-row">
+          <div class="hero-title-block">
+            <h1>
+              {{ property.street_address }}
+              <span class="muted">
+                – {{ property.city }}, {{ property.province }}
+              </span>
+            </h1>
+
+            {% if property.postal_code %}
+              <p class="muted">{{ property.postal_code }}</p>
+            {% endif %}
+
+            {% if current_char %}
+              <p class="muted">
+                Structural snapshot as of {{ current_char.as_of_date }}
+                ({{ current_char.primary_source }})
+              </p>
+            {% else %}
+              <p class="muted">
+                No structural characteristics recorded yet.
+              </p>
+            {% endif %}
+          </div>
+
+          <div class="hero-price-block">
+            {% if active_listing %}
+              <div class="hero-price">
+                {% if active_listing.price_cad %}
+                  ${{ "{:,}".format(active_listing.price_cad) }} CAD
+                {% else %}
+                  (no asking price)
+                {% endif %}
+              </div>
+              <p class="muted">
+                From REW listing scraped at
+                {{ active_listing.scraped_at or "unknown time" }}
+              </p>
+              {% if active_listing.rew_url %}
+                <a
+                  href="{{ active_listing.rew_url }}"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="btn-link"
+                >
+                  View listing on REW
+                </a>
+              {% endif %}
+            {% else %}
+              <p class="muted">
+                No active listing linked to this property.
+              </p>
+            {% endif %}
+          </div>
+        </div>
+      </section>
+
+      <!-- DETAILS: current snapshot + latest assessment / sales -->
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Details</h2>
+          <div class="panel-subtitle">
+            Current merged snapshot of this property, plus latest assessment and last sale.
+          </div>
+        </div>
+
+        {% set latest_assessment = merged_assessments[0] if merged_assessments and merged_assessments|length > 0 else None %}
+        {% set last_sale = merged_sales[0] if merged_sales and merged_sales|length > 0 else None %}
+
+        {% if not current_char and not latest_assessment and not last_sale and not active_listing %}
+          <p class="muted">
+            No structural or valuation data available yet.
+          </p>
+        {% else %}
+          <div class="two-col">
+            <!-- Structural details -->
+            <div>
+              <h3>Structure</h3>
+              {% if current_char %}
+                <dl class="def-list">
+                  <dt>Bedrooms</dt>
+                  <dd>{{ current_char.beds or "—" }}</dd>
+
+                  <dt>Bathrooms</dt>
+                  <dd>{{ current_char.baths or "—" }}</dd>
+
+                  <dt>Finished ft²</dt>
+                  <dd>{{ current_char.sqft_finished or "—" }}</dd>
+
+                  <dt>Unfinished ft²</dt>
+                  <dd>{{ current_char.sqft_unfinished or "—" }}</dd>
+
+                  <dt>Lot ft²</dt>
+                  <dd>{{ current_char.lot_sqft or "—" }}</dd>
+
+                  <dt>Year built</dt>
+                  <dd>{{ current_char.year_built or "—" }}</dd>
+
+                  <dt>Primary source</dt>
+                  <dd>{{ current_char.primary_source }}</dd>
+                </dl>
+              {% else %}
+                <p class="muted">No structural snapshot for this property yet.</p>
+              {% endif %}
+            </div>
+
+            <!-- Valuation details -->
+            <div>
+              <h3>Valuation</h3>
+              {% if latest_assessment or last_sale or active_listing %}
+                <dl class="def-list">
+                  {% if latest_assessment %}
+                    <dt>Latest assessment</dt>
+                    <dd>
+                      ${{ "{:,}".format(latest_assessment.total_assessed_cad) }}
+                      ({{ latest_assessment.assessment_year }})
+                      – {{ latest_assessment.primary_source }}
+                    </dd>
+                  {% endif %}
+
+                  {% if last_sale %}
+                    <dt>Last sold</dt>
+                    <dd>
+                      ${{ "{:,}".format(last_sale.sale_price_cad) }}
+                      on {{ last_sale.sale_date }}
+                      – {{ last_sale.primary_source }}
+                    </dd>
+                  {% endif %}
+
+                  {% if active_listing %}
+                    <dt>Current asking (REW)</dt>
+                    <dd>
+                      {% if active_listing.price_cad %}
+                        ${{ "{:,}".format(active_listing.price_cad) }}
+                      {% else %}
+                        (no asking price)
+                      {% endif %}
+                      {% if active_listing.scraped_at %}
+                        – scraped {{ active_listing.scraped_at }}
+                      {% endif %}
+                    </dd>
+                  {% endif %}
+                </dl>
+              {% else %}
+                <p class="muted">No assessment, sale, or listing valuation recorded yet.</p>
+              {% endif %}
+            </div>
+          </div>
+        {% endif %}
+      </section>
+
+      <!-- HISTORY: sales, assessments, characteristics -->
+      <section class="panel">
+        <div class="panel-header">
+          <h2>History</h2>
+          <div class="panel-subtitle">
+            Sales, assessments, and structural changes over time (merged from multiple sources).
+          </div>
+        </div>
+
+        <!-- Sales history -->
+        <h3>Sales history</h3>
+        {% if merged_sales and merged_sales|length > 0 %}
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Sale Price</th>
+                <th>Price / ft²</th>
+                <th>Beds</th>
+                <th>Baths</th>
+                <th>Primary Source</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in merged_sales %}
+                <tr>
+                  <td>{{ row.sale_date }}</td>
+                  <td>${{ "{:,}".format(row.sale_price_cad) }}</td>
+                  <td>
+                    {% if row.price_per_sqft is not none %}
+                      ${{ "%.0f"|format(row.price_per_sqft) }}
+                    {% else %}—{% endif %}
+                  </td>
+                  <td>{{ row.beds if row.beds is not none else "—" }}</td>
+                  <td>{{ row.baths if row.baths is not none else "—" }}</td>
+                  <td>{{ row.primary_source }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% else %}
+          <p class="muted">No sales history available.</p>
+        {% endif %}
+
+        <!-- Assessment history -->
+        <h3>Assessment history</h3>
+        {% if merged_assessments and merged_assessments|length > 0 %}
+          <table>
+            <thead>
+              <tr>
+                <th>Year</th>
+                <th>Total Assessed</th>
+                <th>Land</th>
+                <th>Building</th>
+                <th>Change vs Prev</th>
+                <th>Primary Source</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in merged_assessments %}
+                <tr>
+                  <td>{{ row.assessment_year }}</td>
+                  <td>${{ "{:,}".format(row.total_assessed_cad) }}</td>
+                  <td>
+                    {% if row.land_value is not none %}
+                      ${{ "{:,}".format(row.land_value) }}
+                    {% else %}—{% endif %}
+                  </td>
+                  <td>
+                    {% if row.building_value is not none %}
+                      ${{ "{:,}".format(row.building_value) }}
+                    {% else %}—{% endif %}
+                  </td>
+                  <td>
+                    {% if row.change_pct is not none %}
+                      {{ "%.1f"|format(row.change_pct) }}%
+                    {% else %}—{% endif %}
+                  </td>
+                  <td>{{ row.primary_source }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          <p class="muted" style="margin-top: 4px;">
+            Merged from multiple sources where available; primary source wins per year.
+          </p>
+        {% else %}
+          <p class="muted">No assessment history available.</p>
+        {% endif %}
+
+        <!-- Characteristics history -->
+        <h3>Characteristics history</h3>
+        {% if merged_chars and merged_chars|length > 0 %}
+          <table>
+            <thead>
+              <tr>
+                <th>As Of</th>
+                <th>Beds</th>
+                <th>Baths</th>
+                <th>Finished ft²</th>
+                <th>Unfinished ft²</th>
+                <th>Lot ft²</th>
+                <th>Year Built</th>
+                <th>Primary Source</th>
+                <th>All Sources</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in merged_chars %}
+                <tr>
+                  <td>{{ row.as_of_date }}</td>
+                  <td>{{ row.beds or "—" }}</td>
+                  <td>{{ row.baths or "—" }}</td>
+                  <td>{{ row.sqft_finished or "—" }}</td>
+                  <td>{{ row.sqft_unfinished or "—" }}</td>
+                  <td>{{ row.lot_sqft or "—" }}</td>
+                  <td>{{ row.year_built or "—" }}</td>
+                  <td>{{ row.primary_source }}</td>
+                  <td>{{ row.all_sources | join(", ") }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% else %}
+          <p class="muted">No characteristic snapshots yet.</p>
+        {% endif %}
+      </section>
+
+      <!-- RAW DATA (by source, collapsible) -->
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Raw data</h2>
+          <div class="panel-subtitle">
+            Unmerged records grouped by source. Useful for debugging inconsistencies.
+          </div>
+        </div>
+
+        <details style="margin-top: 0.5rem;">
+          <summary><strong>Show raw data by source</strong></summary>
+
+          <!-- Raw sales by source -->
+          <h3>Sales (by source)</h3>
+          {% if raw_sales_by_source %}
+            {% for source, rows in raw_sales_by_source.items() %}
+              <h4>{{ source }}</h4>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Sale Price</th>
+                    <th>List Price</th>
+                    <th>Beds</th>
+                    <th>Baths</th>
+                    <th>Sqft</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for s in rows %}
+                    <tr>
+                      <td>{{ s.sale_date }}</td>
+                      <td>
+                        {% if s.sale_price_cad is not none %}
+                          ${{ "{:,}".format(s.sale_price_cad) }}
+                        {% else %}—{% endif %}
+                      </td>
+                      <td>
+                        {% if s.list_price_cad is not none %}
+                          ${{ "{:,}".format(s.list_price_cad) }}
+                        {% else %}—{% endif %}
+                      </td>
+                      <td>{{ s.beds if s.beds is not none else "—" }}</td>
+                      <td>{{ s.baths if s.baths is not none else "—" }}</td>
+                      <td>{{ s.sqft if s.sqft is not none else "—" }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            {% endfor %}
+          {% else %}
+            <p class="muted">No raw sales rows.</p>
+          {% endif %}
+
+          <!-- Raw assessments by source -->
+          <h3>Assessments (by source)</h3>
+          {% if raw_assessments_by_source %}
+            {% for source, rows in raw_assessments_by_source.items() %}
+              <h4>{{ source }}</h4>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Year</th>
+                    <th>Total</th>
+                    <th>Land</th>
+                    <th>Building</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for a in rows %}
+                    <tr>
+                      <td>{{ a.assessment_year }}</td>
+                      <td>
+                        {% if a.total_assessed_cad is not none %}
+                          ${{ "{:,}".format(a.total_assessed_cad) }}
+                        {% else %}—{% endif %}
+                      </td>
+                      <td>
+                        {% if a.land_value is not none %}
+                          ${{ "{:,}".format(a.land_value) }}
+                        {% else %}—{% endif %}
+                      </td>
+                      <td>
+                        {% if a.building_value is not none %}
+                          ${{ "{:,}".format(a.building_value) }}
+                        {% else %}—{% endif %}
+                      </td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            {% endfor %}
+          {% else %}
+            <p class="muted">No raw assessment rows.</p>
+          {% endif %}
+
+          <!-- Raw characteristics by source -->
+          <h3>Characteristics (by source)</h3>
+          {% if raw_chars_by_source %}
+            {% for source, rows in raw_chars_by_source.items() %}
+              <h4>{{ source }}</h4>
+              <table>
+                <thead>
+                  <tr>
+                    <th>As Of</th>
+                    <th>Beds</th>
+                    <th>Baths</th>
+                    <th>Finished ft²</th>
+                    <th>Unfinished ft²</th>
+                    <th>Lot ft²</th>
+                    <th>Year Built</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for c in rows %}
+                    <tr>
+                      <td>{{ c.as_of_date }}</td>
+                      <td>{{ c.beds or "—" }}</td>
+                      <td>{{ c.baths or "—" }}</td>
+                      <td>{{ c.sqft_finished or "—" }}</td>
+                      <td>{{ c.sqft_unfinished or "—" }}</td>
+                      <td>{{ c.lot_sqft or "—" }}</td>
+                      <td>{{ c.year_built or "—" }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            {% endfor %}
+          {% else %}
+            <p class="muted">No raw characteristic rows yet.</p>
+          {% endif %}
+        </details>
+      </section>
+
+    </div>
+  </body>
+</html>
