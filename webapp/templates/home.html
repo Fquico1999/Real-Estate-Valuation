@@ -60,6 +60,7 @@
       <th>Price</th>
       <th>Beds</th>
       <th>Baths</th>
+      <th>Property Type</th>
       <th>Size (sqft)</th>
     </tr>
     {% for l in latest %}
@@ -79,6 +80,7 @@
       </td>
       <td>{{ l.beds }}</td>
       <td>{{ l.baths }}</td>
+      <td>{{ l.property_type }}</td>
       <td>{{ l.sqft }}</td>
     </tr>
     {% endfor %}
