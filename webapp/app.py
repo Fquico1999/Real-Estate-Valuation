@@ -423,4 +423,4 @@ async def map_view(
             "max_days": max_days,
             "focus_id": focus_id,
         },
-    )
+    ) 
