@@ -44,64 +44,71 @@ PAGE_TIMEOUT_SECONDS = 45
 
 SEARCH_JS_TEMPLATE = r"""
 (async () => {
-  const wait = (ms) => new Promise(r => setTimeout(r, ms));
+    const wait = (ms) => new Promise(r => setTimeout(r, ms));
 
-  const agreeBtn = document.getElementById('btnAgree');
-  if (agreeBtn) { agreeBtn.click(); await wait(1000); }
+    const waitForNavigation = () =>
+        new Promise(resolve => {
+            window.addEventListener('load', resolve, { once: true });
+        });
 
-  const input = document.querySelector('#rsbSearch');
-  if (!input) return;
-  input.focus();
-  input.value = '';
+    const agreeBtn = document.getElementById('btnAgree');
+    if (agreeBtn) { 
+        agreeBtn.click(); 
+        await wait(1000); 
+    }
 
-  const address = "%(address)s";
-  for (let char of address) {
-      input.value += char;
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-      await wait(30);
-  }
-  input.dispatchEvent(new Event('change', { bubbles: true }));
+    const input = document.querySelector('#rsbSearch');
+    input.focus();
+    input.value = '';
 
-  let attempts = 0;
-  while (!document.querySelector('ul.ui-autocomplete') && attempts < 50) {
-      await wait(100);
-      attempts++;
-  }
-  await wait(500);
+    const address = "%(address)s";
+    for (let char of address) {
+        input.value += char;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        await wait(30);
+    }
+    input.dispatchEvent(new Event('change', { bubbles: true }));
 
-  const activeLink = document.querySelector('li.ui-menu-item.ui-state-active a');
-  if (activeLink) {
-      activeLink.click();
-  } else {
-      input.dispatchEvent(new KeyboardEvent('keydown', {
-          bubbles: true, cancelable: true, key: 'Enter', code: 'Enter', keyCode: 13
-      }));
-  }
+    let attempts = 0;
+    while (!document.querySelector('ul.ui-autocomplete') && attempts < 50) {
+        await wait(100);
+        attempts++;
+    }
+    await wait(500);
+
+    // Set up the navigation wait *BEFORE* triggering the navigation
+    const navigationPromise = waitForNavigation();
+
+    // Execute Selection (Arrow Down + Targeted Click)
+    input.dispatchEvent(new KeyboardEvent('keydown', { 
+        bubbles: true, cancelable: true, key: 'ArrowDown', code: 'ArrowDown', keyCode: 40 
+    }));
+    await wait(300);
+
+    const activeLink = document.querySelector('li.ui-menu-item.ui-state-active a');
+
+    if (activeLink) {
+        activeLink.click();
+    } else {
+        input.dispatchEvent(new KeyboardEvent('keydown', { 
+            bubbles: true, cancelable: true, key: 'Enter', code: 'Enter', keyCode: 13 
+        }));
+    }
+
+    // WAIT FOR NEW PAGE TO LOAD
+    await navigationPromise;
+
+    // Final small wait after load confirmation
+    await wait(700); 
 })();
 """
+
 
 WAIT_FOR_INFO_OR_ERROR = """js:() => {
   const hasInfo = document.querySelector('#lblTotalAssessedValue');
   const error = document.body.innerText.includes('No results found');
   return hasInfo || error;
 }"""
-
-
-def build_search_string(listing: RewListing) -> str:
-    """
-    Construct the search string used on bcassessment.ca
-    from a REW listing. Simple & overridable.
-    """
-    parts = []
-    if listing.street_address:
-        parts.append(listing.street_address.strip())
-    if listing.city:
-        parts.append(listing.city.strip())
-    # BC Assessment usually doesn't need province in the query,
-    # but you can add it if you like:
-    # if listing.province:
-    #     parts.append(listing.province.strip())
-    return " ".join(parts)
 
 
 async def fetch_next_rew_batch(session, offset: int, batch_size: int = BATCH_SIZE):
@@ -139,9 +146,7 @@ async def fetch_next_rew_batch(session, offset: int, batch_size: int = BATCH_SIZ
     return result.scalars().all()
 
 
-async def process_single_listing(
-    crawler: AsyncWebCrawler, session, listing: RewListing
-):
+async def process_single_listing(crawler: AsyncWebCrawler, session, listing: RewListing):
     """
     For a given REW listing:
       - Search on bcassessment.ca by address
@@ -151,10 +156,8 @@ async def process_single_listing(
           * assessments -> Assessment(source='bc_assessment')
           * neighbour URLs -> enqueue into BCAssessmentUrl
     """
-    search_str = build_search_string(listing)
-    if not search_str:
-        logger.info(f"Skipping listing {listing.id}: no usable address")
-        return
+
+    search_str = listing.street_address
 
     logger.info(
         f"[Listing {listing.id}] Search BC Assessment for: {search_str!r}"
