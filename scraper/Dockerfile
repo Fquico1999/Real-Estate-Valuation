@@ -5,7 +5,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxcomposite1 libxdamage1 libxrandr2 libgbm1 libasound2 libpangocairo-1.0-0 \
     libpango-1.0-0 libcairo2 libatspi2.0-0 wget xvfb \
     libpq-dev gcc g++ \
-    && rm -rf /var/lib/apt/lists/*
+    curl autoconf automake libtool pkg-config git make \
+ && git clone https://github.com/openvenues/libpostal /tmp/libpostal \
+ && cd /tmp/libpostal \
+ && ./bootstrap.sh \
+ && ./configure --datadir=/usr/share/libpostal \
+ && make -j"$(nproc)" \
+ && make install \
+ && ldconfig \
+ && rm -rf /tmp/libpostal \
+ && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
