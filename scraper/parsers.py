@@ -7,6 +7,9 @@ from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
 
+from property_utils import normalize_address
+
+
 
 def _find_json_ld_blocks(soup: BeautifulSoup) -> list[dict]:
     blocks: list[dict] = []
@@ -64,34 +67,27 @@ def _parse_views(text: str) -> Optional[int]:
     return _parse_int(text)
 
 
-def _simple_canonical_address(street: Optional[str], city: Optional[str], postal: Optional[str]) -> Optional[str]:
+def _simple_canonical_address(
+    street: Optional[str],
+    city: Optional[str],
+    postal: Optional[str],
+    province: str = "BC",
+) -> Optional[str]:
     """
-    Very simple canonicalization:
-      - lowercases
-      - strips spaces at ends
-      - removes commas
-      - removes internal spaces in postal code
-    Later you can replace this with a libpostal-based parser.
+    Wrapper around property_utils.normalize_address so that REW listing
+    canonicalization uses the same libpostal-based logic as Properties.
+
+    `province` defaults to 'BC' since REW listings are all BC in this project.
     """
     if not street and not city and not postal:
         return None
 
-    def norm(s: Optional[str]) -> Optional[str]:
-        if not s:
-            return None
-        return (
-            s.lower()
-            .replace(",", " ")
-            .replace(".", " ")
-            .strip()
-        )
-
-    street_n = norm(street)
-    city_n = norm(city)
-    postal_n = norm(postal.replace(" ", "")) if postal else None
-
-    parts = [p for p in [street_n, city_n, postal_n] if p]
-    return "|".join(parts) if parts else None
+    return normalize_address(
+        street_address=street or "",
+        city=city or "",
+        province=province,
+        postal_code=postal,
+    )
 
 
 def parse_rew_listing(html: str, url: str) -> Dict[str, Any]:

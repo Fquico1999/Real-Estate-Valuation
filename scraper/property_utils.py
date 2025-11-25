@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import Property
+from address_canonicalizer import canonical_address_from_parts
 
 
 def normalize_address(
@@ -12,23 +13,18 @@ def normalize_address(
     province: str,
     postal_code: Optional[str] = None,
 ) -> str:
-    def norm(s: Optional[str]) -> Optional[str]:
-        if not s:
-            return None
-        return (
-            s.lower()
-            .replace(",", " ")
-            .replace(".", " ")
-            .strip()
-        )
+    """
+    Canonical address used for de-duplication.
 
-    street_n = norm(street_address)
-    city_n = norm(city)
-    prov_n = norm(province)
-    postal_n = norm(postal_code.replace(" ", "")) if postal_code else None
+    Implemented via libpostal in address_canonicalizer.canonical_address_from_parts.
+    """
+    return canonical_address_from_parts(
+        street_address=street_address,
+        city=city,
+        province=province,
+        postal_code=postal_code,
+    )
 
-    parts = [p for p in [street_n, city_n, prov_n, postal_n] if p]
-    return "|".join(parts)
 
 def _format_display_part(s: Optional[str]) -> Optional[str]:
     """
