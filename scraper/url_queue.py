@@ -71,10 +71,18 @@ async def mark_failed(session: AsyncSession, url_id: int, error_msg: str):
     await session.execute(
         text("""
             UPDATE rew_listing_urls
-            SET status='error',
-                last_error=:err
-            WHERE id=:id
+            SET 
+                status = CASE
+                    WHEN attempts >= :max_attempts THEN 'dead'
+                    ELSE 'error'
+                END,
+                last_error = :err
+            WHERE id = :id
         """),
-        {"id": url_id, "err": error_msg}
+        {
+            "id": url_id,
+            "err": error_msg,
+            "max_attempts": MAX_SCRAPE_ATTEMPTS,
+        }
     )
     await session.commit()

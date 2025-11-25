@@ -307,7 +307,13 @@ async def home(request: Request):
             await session.execute(rew_error_urls_stmt)
         ).scalar() or 0
 
-        rew_pending_urls = total_rew_urls - rew_done_urls - rew_error_urls
+        # Dead (hit MAX_SCRAPE_ATTEMPTS inside mark_failed)
+        rew_dead_urls_stmt = select(func.count(RewListingUrl.id)).where(
+            RewListingUrl.status == "dead"
+        )
+        rew_dead_urls = (await session.execute(rew_dead_urls_stmt)).scalar() or 0
+
+        rew_pending_urls = total_rew_urls - rew_done_urls - rew_error_urls - rew_dead_urls
         rew_scrape_ratio = (
             rew_done_urls / total_rew_urls if total_rew_urls > 0 else 0.0
         )
@@ -353,7 +359,13 @@ async def home(request: Request):
             await session.execute(bca_error_urls_stmt)
         ).scalar() or 0
 
-        bca_pending_urls = total_bca_urls - bca_done_urls - bca_error_urls
+        bca_dead_urls_stmt = select(func.count(BCAssessmentUrl.id)).where(
+            BCAssessmentUrl.status == "dead"
+        )
+        bca_dead_urls = (await session.execute(bca_dead_urls_stmt)).scalar() or 0
+
+
+        bca_pending_urls = total_bca_urls - bca_done_urls - bca_error_urls - bca_dead_urls
         bca_scrape_ratio = (
             bca_done_urls / total_bca_urls if total_bca_urls > 0 else 0.0
         )
@@ -409,6 +421,7 @@ async def home(request: Request):
             "rew_done_urls": rew_done_urls,
             "rew_pending_urls": rew_pending_urls,
             "rew_error_urls": rew_error_urls,
+            "rew_dead_urls": rew_dead_urls,
             "rew_scrape_ratio": rew_scrape_ratio,
             "latest_rew_discovered": latest_rew_discovered,
             "latest_rew_done": latest_rew_done,
@@ -425,6 +438,7 @@ async def home(request: Request):
             "bca_done_urls": bca_done_urls,
             "bca_pending_urls": bca_pending_urls,
             "bca_error_urls": bca_error_urls,
+            "bca_dead_urls": bca_dead_urls,
             "bca_scrape_ratio": bca_scrape_ratio,
             "latest_bca_discovered": latest_bca_discovered,
             "latest_bca_done": latest_bca_done,
