@@ -8,7 +8,8 @@ from datetime import datetime, date
 from logging_config import setup_logging
 from bs4 import BeautifulSoup
 
-from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode
+from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode, UndetectedAdapter
+from crawl4ai.async_crawler_strategy import AsyncPlaywrightCrawlerStrategy
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from models import (
@@ -37,7 +38,10 @@ setup_logging()
 
 EMPTY_QUEUE_SLEEP_SECONDS = 60
 PER_URL_SLEEP_SECONDS = 1
-PAGE_LOAD_TIMEOUT_SECONDS = 60  # seconds (we pass ms to crawl4ai)
+PAGE_LOAD_TIMEOUT_SECONDS = 30  # seconds (we pass ms to crawl4ai)
+BATCH_SIZE = 3
+RESTART_BROWSER_EVERY_N_BATCHES = 5
+
 
 def _json_safe(value):
     """
@@ -104,9 +108,7 @@ async def upsert_assessments(session, prop_id: int, assessments: list[dict]):
     await session.execute(stmt)
 
 
-async def scrape_bc_property(
-    crawler: AsyncWebCrawler, session, url: str
-) -> None:
+async def scrape_bc_property(crawler: AsyncWebCrawler, session, url: str) -> None:
     """
     Visit a BC Assessment Property/Info page, parse address, characteristics,
     assessments, and neighbour URLs.
@@ -124,8 +126,10 @@ async def scrape_bc_property(
             })();
         """,
         wait_for="css:#lblTotalAssessedValue",  # wait until main assessed value is present
+        wait_until="domcontentloaded",
         page_timeout=PAGE_LOAD_TIMEOUT_SECONDS * 1000,
         delay_before_return_html=1.5,
+        magic=True,
     )
 
     result = await crawler.arun(url=url, config=run_conf)
@@ -187,6 +191,23 @@ async def scrape_bc_property(
         f"Upserted BC Assessment data for property_id={prop_id} at {street}, {city}"
     )
 
+async def process_single_url(crawler, row_id, url):
+    # Create fresh session for this task - thread safe
+    async with AsyncSessionLocal() as session:
+        try:
+            # Small random stagger to avoid hitting server simultaneously
+            await asyncio.sleep(random.uniform(0.1, 1.0))
+            await scrape_bc_property(crawler, session, url)
+            await mark_done(session, row_id)
+            # Shoul happen already, but final commit here
+            await session.commit()
+            logger.info(f"Done: {url}")
+        except Exception as e:
+            await session.rollback() # Clean up if something exploded
+            await mark_failed(session, row_id, str(e))
+            await session.commit() # Commit the failure state
+            logger.error(f"Failed: {url} | Error: {str(e)}")
+
 
 async def main():
     await init_db()
@@ -195,41 +216,50 @@ async def main():
     browser_conf = BrowserConfig(
         headless=True,
         enable_stealth=True,
+        user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         verbose=False,
         extra_args=[
-            "--no-sandbox",
-            "--disable-dev-shm-usage",
-            "--disable-gpu",
+            "--disable-features=IsolateOrigins,site-per-process"
         ],
     )
+    # We define the strategy outside, but we will re-init the crawler inside
+    adapter = UndetectedAdapter()
+    strategy = AsyncPlaywrightCrawlerStrategy(
+        browser_config=browser_conf,
+        browser_adapter=adapter
+    )
 
-    async with AsyncWebCrawler(config=browser_conf) as crawler:
-        logger.info("BC Assessment crawler ready, entering main loop")
+    while True:
+        # Re-enter context manager every N batches to flush memory/cookies
+        try:
+            async with AsyncWebCrawler(crawler_strategy=strategy, config=browser_conf) as crawler:
+                logger.info("Browser session started/restarted.")
+                
+                # Inner loop for N batches
+                for _ in range(RESTART_BROWSER_EVERY_N_BATCHES):
+                    batch = []
+                    async with AsyncSessionLocal() as queue_session:
+                        batch = await dequeue_next_batch(queue_session, batch_size=BATCH_SIZE)
+                        # Ensure the "dequeue" status update is saved before we move on
+                        await queue_session.commit() 
+                    
+                    if not batch:
+                        logger.info(f"Queue empty. Sleeping {EMPTY_QUEUE_SLEEP_SECONDS}s...")
+                        await asyncio.sleep(EMPTY_QUEUE_SLEEP_SECONDS)
+                        continue 
 
-        while True:
-            async with AsyncSessionLocal() as session:
-                logger.info("Fetching next batch from property_crawl queue...")
-                batch = await dequeue_next_batch(session, batch_size=3)
+                    logger.info(f"Processing batch of {len(batch)} URLs...")
+                    tasks = []
+                    for row_id, url in batch:
+                        tasks.append(process_single_url(crawler, row_id, url))
+                    
+                    # Run at the same time
+                    await asyncio.gather(*tasks)
 
-                if not batch:
-                    logger.info(
-                        f"No pending BC Assessment URLs. Sleeping {EMPTY_QUEUE_SLEEP_SECONDS} seconds..."
-                    )
-                    await asyncio.sleep(EMPTY_QUEUE_SLEEP_SECONDS)
-                    continue
-
-                for row_id, url in batch:
-                    try:
-                        await scrape_bc_property(crawler, session, url)
-                        await mark_done(session, row_id)
-                    except Exception as e:
-                        await mark_failed(session, row_id, str(e))
-                        logger.exception(f"Failed BC Assessment scrape: {url} ({e})")
-
-                    sleep_for = PER_URL_SLEEP_SECONDS + random.uniform(0, 1)
-                    logger.info(f"Sleeping {sleep_for:.2f}s before next BC Assessment URL...")
-                    await asyncio.sleep(sleep_for)
-
+                logger.info("Recycling browser instance...")
+        except Exception as e:
+            logger.critical(f"Crawler crashed completely: {e}. Restarting loop in 10s...")
+            await asyncio.sleep(10)
 
 if __name__ == "__main__":
     asyncio.run(main())
