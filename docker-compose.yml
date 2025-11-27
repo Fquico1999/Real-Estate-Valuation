@@ -29,9 +29,9 @@ services:
     # First run: import BC extract from Geofabrik
     environment:
       # BC-only extract to keep size down
-      NOMINATIM_PBF_URL: "https://download.geofabrik.de/north-america/canada/british-columbia-latest.osm.pbf"
-      NOMINATIM_IMPORT_WIKIPEDIA: "no"
-      NOMINATIM_USE_US_TIGER_DATA: "no"
+      PBF_URL: "https://download.geofabrik.de/north-america/canada/british-columbia-latest.osm.pbf"
+      IMPORT_WIKIPEDIA: "false"
+      USE_US_TIGER_DATA: "false"
       POSTGRES_SHARED_BUFFERS: "512MB"
       POSTGRES_MAINTENANCE_WORK_MEM: "256MB"
     volumes:
