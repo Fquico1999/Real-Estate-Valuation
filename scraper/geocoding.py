@@ -17,6 +17,12 @@ GOOD_CLASSES = {
     ("building", "yes"),
     ("building", "house"),
     ("building", "residential"),
+    ("building", "apartments"),
+    ("building", "detached"),
+    ("building", "semi-detached"),
+    ("building", "terrace"),
+    ("building", "duplex"),
+    ("building", "triplex"),
     ("place", "house"),
     ("place", "isolated_dwelling"),
 }
@@ -89,20 +95,28 @@ async def geocode(address: str) -> GeocodeResult:
         logger.info(f"No geocode results for {address!r}")
         return GeocodeResult(lat=None, lng=None)
 
-    # Pick the best candidate:
-    # 1) prefer "building/house-like" results
-    # 2) otherwise fall back to the first one
-    best = None
+    # Filter ONLY building-level results
+    building_candidates = []
     for cand in data:
         osm_class = cand.get("class")
         osm_type = cand.get("type")
         key = (osm_class, osm_type)
-        if key in GOOD_CLASSES:
-            best = cand
-            break
 
-    if best is None:
-        best = data[0]
+        # Option 1: fixed allowlist (strict)
+        if key in GOOD_CLASSES:
+            building_candidates.append(cand)
+
+        # Option 2: or class == 'building' regardless of type
+        elif osm_class == "building":
+            building_candidates.append(cand)
+
+    # If NO building is found → treat as NO RESULT
+    if not building_candidates:
+        logger.info(f"No building-level geocode results for {address!r}")
+        return GeocodeResult(lat=None, lng=None)
+
+    # Pick the first building candidate (usually most relevant)
+    best = building_candidates[0]
 
     try:
         lat = float(best["lat"])

@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import Property
-from address_canonicalizer import canonical_address_from_parts
+from address_canonicalizer import canonical_address_from_parts, normalize_street_for_geocoding
 from geocoding import BBox 
 
 def format_full_address(
@@ -14,16 +14,19 @@ def format_full_address(
     postal_code: Optional[str] = None,
 ) -> str:
     """
-    Build a reasonably robust single-line address string for geocoding.
+    Build a single-line address string for geocoding, reusing the same
+    direction/suffix semantics as the address canonicalizer.
+    Don't include postal code since Nominatim is horrible with BC Postal codes.
     """
-    street_address = (street_address or "").strip()
+    # Reuse canonicalizer logic for street semantics
+    street_address = normalize_street_for_geocoding(street_address or "")
+
     city = (city or "").strip()
     province = (province or "").strip()
-    postal_code = (postal_code or "").strip() if postal_code else ""
 
     parts = [street_address]
 
-    locality_parts = [p for p in [city, province, postal_code] if p]
+    locality_parts = [p for p in [city, province] if p]
     if locality_parts:
         parts.append(" ".join(locality_parts))
 
