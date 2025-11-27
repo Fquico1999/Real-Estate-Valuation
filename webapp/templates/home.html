@@ -221,6 +221,33 @@
         {% endfor %}
       </table>
     </section>
+    
+    <!-- Geocoding Coverage Panel -->
+    <section class="panel">
+      <h2>Geocoding Coverage</h2>
+      <div class="panel-content">
+        <p>
+          <strong>{{ geocoded_properties }}</strong> properties have valid latitude/longitude.<br>
+          <strong>{{ ungeocoded_properties }}</strong> properties still need geocoding.
+        </p>
+
+        <p>
+          Coverage: 
+          <strong>{{ "%.1f" % (geocoded_ratio * 100) }}%</strong> geocoded
+          ({{ geocoded_properties }} / {{ total_properties }}).
+        </p>
+
+        <div class="progress-bar">
+          <div class="progress" style="width: {{ geocoded_ratio * 100 }}%;"></div>
+        </div>
+
+        <p class="panel-note">
+          This panel will later be expanded to track calls to external,
+          rate-limited geocoding APIs for properties Nominatim cannot geocode.
+        </p>
+      </div>
+    </section>
+
   </div>
 </body>
 </html>
