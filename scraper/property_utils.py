@@ -1,11 +1,33 @@
-from typing import Optional
+from typing import Optional, Dict
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import Property
 from address_canonicalizer import canonical_address_from_parts
+from geocoding import BBox 
 
+def format_full_address(
+    street_address: str,
+    city: str,
+    province: str,
+    postal_code: Optional[str] = None,
+) -> str:
+    """
+    Build a reasonably robust single-line address string for geocoding.
+    """
+    street_address = (street_address or "").strip()
+    city = (city or "").strip()
+    province = (province or "").strip()
+    postal_code = (postal_code or "").strip() if postal_code else ""
+
+    parts = [street_address]
+
+    locality_parts = [p for p in [city, province, postal_code] if p]
+    if locality_parts:
+        parts.append(" ".join(locality_parts))
+
+    return ", ".join(parts)
 
 def normalize_address(
     street_address: str,
@@ -62,6 +84,7 @@ async def get_or_create_property(
     postal_code: Optional[str] = None,
     lat: Optional[float] = None,
     lng: Optional[float] = None,
+    bbox: Optional[BBox] = None,
 ) -> Property:
     # Normalize for display
     street_fmt = _format_display_part(street)
@@ -83,10 +106,23 @@ async def get_or_create_property(
         if prop.lng is None and lng is not None:
             prop.lng = lng
             updated = True
+        
+        # Only set bbox if we don't have one yet and we got one
+        if prop.bbox is None and bbox is not None:
+            if isinstance(bbox, BBox):
+                prop.bbox = bbox.to_dict()
+            else:
+                prop.bbox = bbox
+            updated = True
 
         if updated:
             await session.flush()
         return prop
+
+    if isinstance(bbox, BBox):
+        bbox_dict = bbox.to_dict()
+    else:
+        bbox_dict = bbox
 
     prop = Property(
         street_address=street_fmt,
@@ -95,6 +131,7 @@ async def get_or_create_property(
         postal_code=postal_code_fmt,
         lat=lat,
         lng=lng,
+        bbox=bbox_dict,
         canonical_address=canonical,
     )
     session.add(prop)
