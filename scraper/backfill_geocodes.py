@@ -13,8 +13,7 @@ from geocoding import geocode
 logger = logging.getLogger(f"scraper.{pathlib.Path(__file__).stem}")
 setup_logging()
 
-BATCH_SIZE = 500  # tune as needed
-
+BATCH_SIZE = 500  
 
 async def fetch_batch(session) -> List[Property]:
     result = await session.execute(
