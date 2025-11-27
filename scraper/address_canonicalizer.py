@@ -47,6 +47,7 @@ SUFFIXES = {
     "hwy": "hwy",
     # you can add more, but this covers 99% of Vancouver streets
 }
+UNIT_PREFIX_RE = re.compile(r"^\s*(?:#?\d+[/-])\s*(.+)$")
 
 
 def _strip_leading_zeros(s: str) -> str:
@@ -170,6 +171,57 @@ def _normalize_city(raw_city: str, libpostal_city: str | None = None) -> str:
     if tokens and tokens[0] in DIR_TOKENS:
         tokens = tokens[1:]
     return " ".join(tokens)
+
+
+def normalize_street_for_geocoding(street_address: str) -> str:
+    """
+    Normalize a raw street string into something Nominatim-friendly using the
+    same DIR_TOKENS/DIR_WORDS/SUFFIXES as canonicalization:
+
+      - strip unit prefixes like '214-2235 Broadway E' -> '2235 Broadway E'
+      - extract house number
+      - normalize the road part with _normalize_road (direction + suffix logic)
+    """
+    if not street_address:
+        return ""
+
+    # 1) Strip unit prefixes like '214-2235 Something St'
+    s = street_address.strip()
+    m = UNIT_PREFIX_RE.match(s)
+    if m:
+        s = m.group(1)
+
+    # 2) Lowercase, normalize punctuation similar to _extract_direction_from_raw
+    s_lower = s.lower()
+    s_lower = s_lower.replace(".", " ")
+    s_lower = re.sub(r"[-–—]", " ", s_lower)
+    tokens = [t for t in s_lower.split() if t]
+
+    if not tokens:
+        return s.strip()
+
+    # 3) First numeric-ish token is the house number
+    house = None
+    rest_tokens: list[str] = []
+    for t in tokens:
+        if house is None and re.match(r"^\d+[a-z]?$", t):
+            house = _strip_leading_zeros(t)
+        else:
+            rest_tokens.append(t)
+
+    road_norm = None
+    if rest_tokens:
+        road_norm = _normalize_road(" ".join(rest_tokens))
+
+    if house and road_norm:
+        return f"{house} {road_norm}"
+    if house:
+        return house
+    if road_norm:
+        return road_norm
+
+    # Fallback: return original, trimmed
+    return s.strip()
 
 def _parse_with_libpostal(raw: str) -> Dict[str, str]:
     """

@@ -68,6 +68,7 @@ class Property(Base):
     postal_code = Column(String(32))
     lat = Column(Float)
     lng = Column(Float)
+    bbox = Column(JSON)
     canonical_address = Column(Text, unique=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())

@@ -1,4 +1,5 @@
 crawl4ai
+aiohttp
 sqlalchemy[asyncio]
 asyncpg
 psycopg2-binary

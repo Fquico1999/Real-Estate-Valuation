@@ -403,6 +403,25 @@ async def home(request: Request):
 
         latest_bca_props = (await session.execute(latest_bca_props_stmt)).all()
 
+        # Geocoding coverage
+        geocoded_properties_stmt = select(func.count(Property.id)).where(
+            Property.lat.isnot(None),
+            Property.lng.isnot(None),
+        )
+        geocoded_properties = (
+            await session.execute(geocoded_properties_stmt)
+        ).scalar() or 0
+
+        ungeocoded_properties = max(
+            total_properties - geocoded_properties, 0
+        )
+
+        geocoded_ratio = (
+            geocoded_properties / total_properties
+            if total_properties > 0
+            else 0.0
+        )
+
     return templates.TemplateResponse(
         "home.html",
         {
@@ -416,6 +435,10 @@ async def home(request: Request):
             "total_raw_scrapes": total_raw_scrapes,
             "total_rew_urls": total_rew_urls,
             "total_bca_urls": total_bca_urls,
+            # Geocoding stats
+            "geocoded_properties": geocoded_properties,
+            "ungeocoded_properties": ungeocoded_properties,
+            "geocoded_ratio": geocoded_ratio,
             # REW scraper stats
             "latest": latest,
             "rew_done_urls": rew_done_urls,

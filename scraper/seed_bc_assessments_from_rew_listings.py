@@ -18,7 +18,8 @@ from models import (
     Assessment,
     PropertyCharacteristics,
 )
-from property_utils import get_or_create_property
+from property_utils import get_or_create_property, format_full_address
+from geocoding import geocode
 from parsers import (
     _extract_bc_main_address,
     parse_bc_assessment_property_characteristics,
@@ -201,14 +202,19 @@ async def process_single_listing(crawler: AsyncWebCrawler, session, listing: Rew
         return
 
     province = "BC"
+
+    full_addr = format_full_address(street, city, province, postal)
+    geo = await geocode(full_addr)
+
     prop = await get_or_create_property(
         session=session,
         street=street,
         city=city,
         province=province,
         postal_code=postal,
-        lat=None,
-        lng=None,
+        lat=geo.lat,
+        lng=geo.lng,
+        bbox = geo.bbox.to_dict() if geo.bbox else None,
     )
     property_id = prop.id
 
