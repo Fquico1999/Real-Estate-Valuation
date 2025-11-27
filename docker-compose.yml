@@ -35,7 +35,7 @@ services:
       POSTGRES_SHARED_BUFFERS: "512MB"
       POSTGRES_MAINTENANCE_WORK_MEM: "256MB"
     volumes:
-      - nominatim_data:/var/lib/postgresql/12/main
+      - nominatim_data:/var/lib/postgresql/14/main
     ports:
       - "8080:8080"
     healthcheck:
