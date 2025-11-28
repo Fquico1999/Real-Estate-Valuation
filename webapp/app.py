@@ -37,6 +37,21 @@ PREFERRED_ASSESSMENT_SOURCES: List[str] = ["bc_assessment", "rew_graphql"]
 PREFERRED_SALE_SOURCES: List[str] = ["land_title", "mls", "rew_graphql", "bc_assessment"]
 PREFERRED_CHARACTERISTICS_SOURCES: List[str] = ["rew_graphql", "bc_assessment", "mls"]
 
+# Mappings for human-readable display
+PROPERTY_TYPE_DISPLAY_MAP = {
+    "apartment_condo": "Apartment / Condo",
+    "chalet": "Chalet",
+    "duplex": "Duplex",
+    "fourplex": "Fourplex",
+    "house": "Single Family House",
+    "land_lot": "Land / Lot",
+    "mfd_mobile_home": "Mobile Home",
+    "multifamily": "Multi-Family Dwelling",
+    "recreational": "Recreational Property",
+    "shared_owner": "Shared Ownership",
+    "townhouse": "Townhouse",
+}
+
 engine = create_async_engine(DATABASE_URL, echo=False, future=True)
 AsyncSessionLocal = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 templates = Jinja2Templates(directory="templates")
@@ -546,7 +561,7 @@ async def listing_detail(request: Request, listing_id: int):
     )
 
 
-@app.get("/properties", name="properties_search", response_class=HTMLResponse)
+@app.get("/properties/search", name="properties_search", response_class=HTMLResponse)
 async def properties_search(
     request: Request,
     q: Optional[str] = Query(default=None, description="Search by address"),
@@ -560,17 +575,14 @@ async def properties_search(
     max_sqft: Optional[str] = Query(default=None),
     property_type: Optional[str] = Query(default=None),
     neighbourhood: Optional[str] = Query(default=None),
+    on_market: str = Query(default="any"),  # "any" | "on" | "off"
 ):
     """
-    Property-centric search view.
+    Property-centric search.
 
-    - Always returns Property objects.
-    - Default (no filters): last ~100 properties by most recent scraped data.
-    - Filters:
-        * Address substring (q)
-        * beds / baths / sqft via latest PropertyCharacteristics
-        * price via latest Assessment.total_assessed_cad
-        * neighbourhood + property type via latest REW listing
+    - Default: last ~100 properties, sorted by latest scrape/touch.
+    - Address search uses trigram similarity on canonical_address + (street, city, province).
+    - Filters on price, beds, baths, sqft, property type, neighbourhood, on/off-market.
     """
 
     # Parse numeric filters safely
@@ -586,17 +598,17 @@ async def properties_search(
     async with AsyncSessionLocal() as session:
          # --- Subqueries to get "latest" related rows per property -------------
 
-        # Latest structural snapshot per property (for beds/baths/sqft and recency)
+        # --- Latest characteristics per property ---
         char_latest_sub = (
             select(
-                PropertyCharacteristics.property_id.label("pc_property_id"),
-                func.max(PropertyCharacteristics.scraped_at).label("pc_max_scraped_at"),
+                PropertyCharacteristics.property_id,
+                func.max(PropertyCharacteristics.scraped_at).label("last_char_scraped"),
             )
             .group_by(PropertyCharacteristics.property_id)
             .subquery()
         )
 
-        # Latest assessment per property (for price filter)
+        # --- Latest assessment per property ---
         assess_latest_sub = (
             select(
                 Assessment.property_id.label("a_property_id"),
@@ -606,189 +618,211 @@ async def properties_search(
             .subquery()
         )
 
-        # Latest REW listing per property (for type / neighbourhood)
+        # --- Latest listing per property ---
         listing_latest_sub = (
             select(
-                RewListing.property_id.label("l_property_id"),
-                func.max(RewListing.scraped_at).label("l_max_scraped_at"),
+                RewListing.property_id,
+                func.max(RewListing.scraped_at).label("last_listing_scraped"),
             )
-            .where(RewListing.property_id.isnot(None))
             .group_by(RewListing.property_id)
             .subquery()
         )
 
-        # --- Base query: Property + "current" joined data ---------------------
+        recency_order_col = func.coalesce(
+            char_latest_sub.c.last_char_scraped,
+            listing_latest_sub.c.last_listing_scraped,
+            Property.created_at,
+        )
 
-        stmt = (
+        base = (
             select(
                 Property,
                 PropertyCharacteristics,
                 Assessment,
                 RewListing,
-                char_latest_sub.c.pc_max_scraped_at.label("char_last_scraped_at"),
+                recency_order_col.label("recency"),
             )
-            # latest characteristics (optional)
-            .join(
+            .select_from(Property)
+            # join latest char sub + row
+            .outerjoin(
                 char_latest_sub,
-                char_latest_sub.c.pc_property_id == Property.id,
-                isouter=True,
+                char_latest_sub.c.property_id == Property.id,
             )
-            .join(
+            .outerjoin(
                 PropertyCharacteristics,
                 and_(
                     PropertyCharacteristics.property_id == Property.id,
                     PropertyCharacteristics.scraped_at
-                    == char_latest_sub.c.pc_max_scraped_at,
+                    == char_latest_sub.c.last_char_scraped,
                 ),
-                isouter=True,
             )
-            # latest assessment (optional)
-            .join(
+            # join latest assessment sub + row
+            .outerjoin(
                 assess_latest_sub,
                 assess_latest_sub.c.a_property_id == Property.id,
-                isouter=True,
             )
-            .join(
+            .outerjoin(
                 Assessment,
                 and_(
                     Assessment.property_id == Property.id,
                     Assessment.assessment_year == assess_latest_sub.c.a_max_year,
                 ),
-                isouter=True,
             )
-            # latest REW listing (optional)
-            .join(
+            # join latest listing sub + row
+            .outerjoin(
                 listing_latest_sub,
-                listing_latest_sub.c.l_property_id == Property.id,
-                isouter=True,
+                listing_latest_sub.c.property_id == Property.id,
             )
-            .join(
+            .outerjoin(
                 RewListing,
                 and_(
                     RewListing.property_id == Property.id,
-                    RewListing.scraped_at == listing_latest_sub.c.l_max_scraped_at,
+                    RewListing.scraped_at
+                    == listing_latest_sub.c.last_listing_scraped,
                 ),
-                isouter=True,
             )
         )
 
-        # --- Address search over Properties (not listings) --------------------
+        stmt = base
 
-        if q:
-            pattern = f"%{q.strip()}%"
-            stmt = stmt.where(
-                or_(
-                    Property.street_address.ilike(pattern),
-                    Property.city.ilike(pattern),
-                    Property.canonical_address.ilike(pattern),
-                )
-            )
+        # --- Unified price expression: latest listing price, else latest assessment ---
+        price_expr = func.coalesce(RewListing.price_cad, Assessment.total_assessed_cad)
 
-        # --- Feature filters (using joined tables) ----------------------------
+        # --- Filters ---
+        if min_price_int is not None:
+            stmt = stmt.where(price_expr >= min_price_int)
+        if max_price_int is not None:
+            stmt = stmt.where(price_expr <= max_price_int)
 
-        # beds/baths/sqft from latest characteristics
         if min_beds_int is not None:
-            stmt = stmt.where(PropertyCharacteristics.beds >= min_beds_int)
+            stmt = stmt.where(
+                PropertyCharacteristics.beds >= min_beds_int
+            )
         if max_beds_int is not None:
-            stmt = stmt.where(PropertyCharacteristics.beds <= max_beds_int)
+            stmt = stmt.where(
+                PropertyCharacteristics.beds <= max_beds_int
+            )
 
         if min_baths_int is not None:
-            stmt = stmt.where(PropertyCharacteristics.baths >= min_baths_int)
+            stmt = stmt.where(
+                PropertyCharacteristics.baths >= min_baths_int
+            )
         if max_baths_int is not None:
-            stmt = stmt.where(PropertyCharacteristics.baths <= max_baths_int)
-
-        if min_sqft_int is not None:
-            stmt = stmt.where(PropertyCharacteristics.sqft_finished >= min_sqft_int)
-        if max_sqft_int is not None:
-            stmt = stmt.where(PropertyCharacteristics.sqft_finished <= max_sqft_int)
-
-        # price from latest assessment (total_assessed_cad)
-        if min_price_int is not None:
-            stmt = stmt.where(Assessment.total_assessed_cad >= min_price_int)
-        if max_price_int is not None:
-            stmt = stmt.where(Assessment.total_assessed_cad <= max_price_int)
-
-        # Property type & neighbourhood from latest REW listing
-        if property_type:
-            stmt = stmt.where(RewListing.property_type_human == property_type)
-
-        if neighbourhood:
-            stmt = stmt.where(RewListing.neighbourhood == neighbourhood)
-
-        # --- Default ordering: "most recently scraped" properties -------------
-
-        # Coalesce in order of preference:
-        #   1) latest listing scrape
-        #   2) latest characteristics scrape
-        #   3) property.created_at
-        recency_order_col = func.coalesce(
-            listing_latest_sub.c.l_max_scraped_at,
-            char_latest_sub.c.pc_max_scraped_at,
-            Property.created_at,
-        )
-
-        stmt = stmt.order_by(recency_order_col.desc()).limit(100)
-
-        result = await session.execute(stmt)
-        rows = result.all()
-
-        # Normalize into a list of dicts for the template
-        properties = []
-        for prop, char, assessment, listing, char_last_scraped_at in rows:
-            # pick a display "last scraped" timestamp, prefer listing then char
-            last_scraped_at = None
-            if listing is not None and getattr(listing, "scraped_at", None):
-                last_scraped_at = listing.scraped_at
-            elif char_last_scraped_at is not None:
-                last_scraped_at = char_last_scraped_at
-
-            properties.append(
-                {
-                    "property": prop,
-                    "char": char,
-                    "assessment": assessment,
-                    "listing": listing,
-                    "last_scraped_at": last_scraped_at,
-                }
+            stmt = stmt.where(
+                PropertyCharacteristics.baths <= max_baths_int
             )
 
-        # Dropdown values for filters (from REW listings)
-        neighbourhoods_stmt = (
+        if min_sqft_int is not None:
+            stmt = stmt.where(
+                PropertyCharacteristics.sqft_finished >= min_sqft_int
+            )
+        if max_sqft_int is not None:
+            stmt = stmt.where(
+                PropertyCharacteristics.sqft_finished <= max_sqft_int
+            )
+
+        # Property type (from latest listing)
+        if property_type:
+            stmt = stmt.where(
+                RewListing.property_type == property_type
+            )
+
+        # Neighbourhood filter (latest listing)
+        if neighbourhood:
+            stmt = stmt.where(
+                RewListing.neighbourhood.ilike(f"%{neighbourhood.strip()}%")
+            )
+
+        # On market / off market
+        # "On market" here = property has at least one REW listing (ever),
+        # represented by a row in listing_latest_sub.
+        if on_market == "on":
+            stmt = stmt.where(
+                listing_latest_sub.c.property_id.isnot(None)
+            )
+        elif on_market == "off":
+            stmt = stmt.where(
+                listing_latest_sub.c.property_id.is_(None)
+            )
+
+        # --- Address search with trigram ranking ---
+        similarity_expr = None
+        if q:
+            q_clean = q.strip()
+            if q_clean:
+                q_norm = q_clean.lower()
+                addr_concat = func.concat_ws(
+                    " ",
+                    Property.street_address,
+                    Property.city,
+                    Property.province,
+                )
+
+                # use pg_trgm's similarity() on canonical_address and full address
+                similarity_expr = func.greatest(
+                    func.similarity(
+                        func.lower(Property.canonical_address),
+                        q_norm,
+                    ),
+                    func.similarity(
+                        func.lower(addr_concat),
+                        q_norm,
+                    ),
+                )
+
+                # Keep only vaguely similar rows, then order by similarity desc
+                stmt = stmt.where(similarity_expr > 0.1)
+
+        # --- Ordering & limit ---
+        if similarity_expr is not None:
+            stmt = stmt.order_by(
+                similarity_expr.desc(),
+                recency_order_col.desc(),
+            )
+        else:
+            # Default view: last ~100 properties by recency
+            stmt = stmt.order_by(recency_order_col.desc())
+
+        stmt = stmt.limit(100)
+
+        result = await session.execute(stmt)
+        rows = result.all()  # (Property, PropertyCharacteristics, Assessment, RewListing, recency)
+
+        # For filters UI: distinct property types and neighbourhoods
+        ptypes_result = await session.execute(
+            select(func.distinct(RewListing.property_type))
+            .where(RewListing.property_type.isnot(None))
+            .order_by(RewListing.property_type)
+        )
+        property_types = [r[0] for r in ptypes_result if r[0]]
+
+        nh_result = await session.execute(
             select(func.distinct(RewListing.neighbourhood))
             .where(RewListing.neighbourhood.isnot(None))
             .order_by(RewListing.neighbourhood)
         )
-        property_types_stmt = (
-            select(func.distinct(RewListing.property_type_human))
-            .where(RewListing.property_type_human.isnot(None))
-            .order_by(RewListing.property_type_human)
-        )
-
-        neighbourhoods = [
-            r[0] for r in (await session.execute(neighbourhoods_stmt)).all() if r[0]
-        ]
-        property_types = [
-            r[0] for r in (await session.execute(property_types_stmt)).all() if r[0]
-        ]
+        neighbourhood_options = [r[0] for r in nh_result if r[0]]
 
     return templates.TemplateResponse(
-        "properties.html",
+        "property_search.html",
         {
             "request": request,
-            "query": q or "",
-            "min_beds": min_beds,
-            "max_beds": max_beds,
-            "min_baths": min_baths,
-            "max_baths": max_baths,
-            "min_price": min_price,
-            "max_price": max_price,
-            "min_sqft": min_sqft,
-            "max_sqft": max_sqft,
+            "results": rows,
+            "q": q or "",
+            "min_price": min_price_int,
+            "max_price": max_price_int,
+            "min_beds": min_beds_int,
+            "max_beds": max_beds_int,
+            "min_baths": min_baths_int,
+            "max_baths": max_baths_int,
+            "min_sqft": min_sqft_int,
+            "max_sqft": max_sqft_int,
             "property_type": property_type or "",
-            "neighbourhood": neighbourhood or "",
-            "properties": properties,
-            "neighbourhoods": neighbourhoods,
             "property_types": property_types,
+            "neighbourhood": neighbourhood or "",
+            "neighbourhood_options": neighbourhood_options,
+            "on_market": on_market,
+            "type_map": PROPERTY_TYPE_DISPLAY_MAP,
         },
     )
 

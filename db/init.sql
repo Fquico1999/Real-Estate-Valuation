@@ -1,2 +1,2 @@
--- Placeholder for future DB initialization (extensions, seed data, etc.)
--- For now, SQLAlchemy will create the tables.
+-- db/init.sql
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
