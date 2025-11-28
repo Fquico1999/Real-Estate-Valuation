@@ -43,6 +43,14 @@ PAGE_LOAD_TIMEOUT_SECONDS = 30  # seconds (we pass ms to crawl4ai)
 BATCH_SIZE = 3
 RESTART_BROWSER_EVERY_N_BATCHES = 5
 
+# Timeout / Backoff Tuning
+MAX_RETRIES_ON_TIMEOUT = 3
+TIMEOUT_BACKOFF_SECONDS = [
+    5 * 60,
+    15 * 60,
+    45 * 60
+]
+
 
 def _json_safe(value):
     """
@@ -209,11 +217,22 @@ async def process_single_url(crawler, row_id, url):
             # Shoul happen already, but final commit here
             await session.commit()
             logger.info(f"Done: {url}")
+            return {"url": url, "timed_out": False}
         except Exception as e:
             await session.rollback() # Clean up if something exploded
             await mark_failed(session, row_id, str(e))
             await session.commit() # Commit the failure state
-            logger.error(f"Failed: {url} | Error: {str(e)}")
+            
+            msg = str(e).lower()
+            # Heuristic timeout detection: library may wrap TimeoutError
+            is_timeout = isinstance(e, asyncio.TimeoutError) or "timeout" in msg or "timed out" in msg
+
+            if is_timeout:
+                logger.warning(f"Timeout scraping {url}: {e}")
+            else:
+                logger.error(f"Failed: {url} | Error: {e}")
+
+            return {"url": url, "timed_out": is_timeout}
 
 
 async def main():
@@ -236,6 +255,8 @@ async def main():
         browser_adapter=adapter
     )
 
+    consecutive_timeout_batches = 0 
+
     while True:
         # Re-enter context manager every N batches to flush memory/cookies
         try:
@@ -253,6 +274,7 @@ async def main():
                     if not batch:
                         logger.info(f"Queue empty. Sleeping {EMPTY_QUEUE_SLEEP_SECONDS}s...")
                         await asyncio.sleep(EMPTY_QUEUE_SLEEP_SECONDS)
+                        consecutive_timeout_batches = 0
                         continue 
 
                     logger.info(f"Processing batch of {len(batch)} URLs...")
@@ -261,7 +283,45 @@ async def main():
                         tasks.append(process_single_url(crawler, row_id, url))
                     
                     # Run at the same time
-                    await asyncio.gather(*tasks)
+                    results = await asyncio.gather(*tasks)
+
+                    batch_had_timeout = any(
+                        r and isinstance(r, dict) and r.get("timed_out")
+                        for r in results
+                    )
+
+                    if batch_had_timeout:
+                        consecutive_timeout_batches += 1
+                        logger.warning(
+                            f"Batch had timeouts. consecutive_timeout_batches="
+                            f"{consecutive_timeout_batches}"
+                        )
+                    else:
+                        # Any fully-successful batch resets the counter
+                        if consecutive_timeout_batches:
+                            logger.info(
+                                "Timeouts seem to have cleared; "
+                                "resetting consecutive_timeout_batches to 0."
+                            )
+                        consecutive_timeout_batches = 0
+
+                    # Exponential-style backoff after repeated timeouts
+                    if consecutive_timeout_batches >= MAX_RETRIES_ON_TIMEOUT:
+                        # How far into the backoff schedule we are
+                        idx = min(
+                            consecutive_timeout_batches - MAX_RETRIES_ON_TIMEOUT,
+                            len(TIMEOUT_BACKOFF_SECONDS) - 1,
+                        )
+                        backoff_seconds = TIMEOUT_BACKOFF_SECONDS[idx]
+
+                        logger.warning(
+                            "Hit %s consecutive timeout-heavy batches; "
+                            "backing off for %.0f seconds (%.1f minutes).",
+                            consecutive_timeout_batches,
+                            backoff_seconds,
+                            backoff_seconds / 60.0,
+                        )
+                        await asyncio.sleep(backoff_seconds)
 
                 logger.info("Recycling browser instance...")
         except Exception as e:
