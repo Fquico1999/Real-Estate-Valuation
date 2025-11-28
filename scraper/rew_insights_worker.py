@@ -292,14 +292,19 @@ async def main():
     browser_conf = BrowserConfig(
         headless=True,
         enable_stealth=True,
+        user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         verbose=False,
         extra_args=[
             "--no-sandbox",
             "--disable-dev-shm-usage",
             "--disable-gpu",
         ],
-        adapter=UndetectedAdapter(),
-        crawler_strategy=AsyncPlaywrightCrawlerStrategy,
+    )
+
+    adapter = UndetectedAdapter()
+    strategy = AsyncPlaywrightCrawlerStrategy(
+        browser_config=browser_conf,
+        browser_adapter=adapter
     )
 
     batch_counter = 0
@@ -307,7 +312,7 @@ async def main():
     while True:
         try:
             logger.info("Creating AsyncWebCrawler for REW Insights...")
-            async with AsyncWebCrawler(config=browser_conf) as crawler:
+            async with AsyncWebCrawler(config=browser_conf, crawler_strategy=strategy) as crawler:
                 logger.info("Crawler ready, entering main loop")
                 consecutive_timeout_batches = 0
 
