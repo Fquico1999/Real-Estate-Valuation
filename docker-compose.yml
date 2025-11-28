@@ -86,6 +86,20 @@ services:
       DATABASE_URL: postgresql+asyncpg://rewuser:rewpass@db:5432/real_estate
       GEOCODER_URL: http://nominatim:8080/search
     command: ["python", "bc_assessment_worker.py"]
+  
+  rew_insights_scraper:
+    build:
+      context: ./scraper
+    container_name: rew_insights_scraper
+    init: true
+    shm_size: '2gb'
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://rewuser:rewpass@db:5432/real_estate
+    command: ["python", "rew_insights_worker.py"]
+
 
   webapp:
     build:

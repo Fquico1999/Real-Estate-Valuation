@@ -1,9 +1,10 @@
 # scraper/parsers.py
 import json
 import re
-from datetime import date
+from dataclasses import dataclass, asdict
+from datetime import date, datetime
 from typing import Any, Dict, Optional, List, Tuple
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse, unquote
 
 from bs4 import BeautifulSoup
 
@@ -461,3 +462,395 @@ def parse_bc_assessment_neighbor_urls(html_content: str, base_url: str = "https:
                 urls.add(urljoin(base_url, href))
 
     return sorted(urls)
+
+
+def _rew_insights_parse_number(text: Optional[str], *, float_ok: bool = False) -> Optional[float]:
+    """
+    Loose numeric parser for things like '3 beds', '1.5 baths', '1,234 sq ft'.
+    """
+    if not text:
+        return None
+    # remove commas to support 1,234.5
+    m = re.search(r"[\d\.]+", text.replace(",", ""))
+    if not m:
+        return None
+    val = float(m.group(0))
+    return val if float_ok else int(val)
+
+
+def _rew_insights_decode_polyline(encoded: str) -> List[tuple[float, float]]:
+    """
+    Minimal polyline decoder (Mapbox / Google style).
+    Returns a list of (lat, lng) tuples.
+    """
+    coords: List[tuple[float, float]] = []
+    index = 0
+    lat = 0
+    lng = 0
+    length = len(encoded)
+
+    while index < length:
+        result = 1
+        shift = 0
+        while True:
+            if index >= length:
+                break
+            b = ord(encoded[index]) - 63 - 1
+            index += 1
+            result += b << shift
+            shift += 5
+            if b < 0x1F:
+                break
+        delta_lat = ~(result >> 1) if (result & 1) else (result >> 1)
+        lat += delta_lat
+
+        result = 1
+        shift = 0
+        while True:
+            if index >= length:
+                break
+            b = ord(encoded[index]) - 63 - 1
+            index += 1
+            result += b << shift
+            shift += 5
+            if b < 0x1F:
+                break
+        delta_lng = ~(result >> 1) if (result & 1) else (result >> 1)
+        lng += delta_lng
+
+        coords.append((lat * 1e-5, lng * 1e-5))
+
+    return coords
+
+
+def _rew_insights_decode_mapbox_bbox_from_photo(url: Optional[str]) -> Optional[Dict[str, float]]:
+    """
+    Extract a rough building footprint bbox from the Mapbox static image URL
+    embedded in the JSON-LD 'photo.url' field.
+
+    Returns a dict compatible with geocoding.BBox.to_dict():
+        {'south': ..., 'north': ..., 'west': ..., 'east': ...}
+    """
+    if not url:
+        return None
+
+    # Mapbox static path segment looks like: path-1+...(...encoded_polyline...)/lon,lat,zoom/...
+    m = re.search(r"path-[^()]*\(([^)]+)\)", url)
+    if not m:
+        return None
+    encoded = unquote(m.group(1))
+    coords = _rew_insights_decode_polyline(encoded)
+    if not coords:
+        return None
+
+    lats = [lat for lat, _ in coords]
+    lngs = [lng for _, lng in coords]
+    return {
+        "south": min(lats),
+        "north": max(lats),
+        "west": min(lngs),
+        "east": max(lngs),
+    }
+
+
+@dataclass
+class RewInsightsBasicInfo:
+    as_of_date: Optional[date]
+    street_address: Optional[str]
+    city: Optional[str]
+    province: Optional[str]
+    postal_code: Optional[str]
+    lat: Optional[float]
+    lng: Optional[float]
+    bbox: Optional[Dict[str, float]]
+    property_type: Optional[str]
+    beds: Optional[float]
+    baths: Optional[float]
+    sqft: Optional[int]
+    year_built: Optional[int]
+    raw_place: Dict[str, Any]
+    raw_details: Dict[str, Any]
+
+
+def _parse_rew_insights_basic_info(soup: BeautifulSoup, page_url: str) -> RewInsightsBasicInfo:
+    """
+    Parse address, geo, basic stats + raw details from an Insights page.
+    """
+    place_data: Dict[str, Any] = {}
+
+    # 1) JSON-LD with @type = "Place"
+    for tag in soup.find_all("script", attrs={"type": "application/ld+json"}):
+        txt = tag.string or tag.text or ""
+        if not txt.strip():
+            continue
+        try:
+            data = json.loads(txt)
+        except Exception:
+            continue
+
+        # Some pages wrap this in a list, others as a single dict
+        if isinstance(data, list):
+            for item in data:
+                if isinstance(item, dict) and item.get("@type") == "Place":
+                    place_data = item
+                    break
+        elif isinstance(data, dict) and data.get("@type") == "Place":
+            place_data = data
+
+        if place_data:
+            break
+
+    addr = place_data.get("address") or {}
+    street_address = addr.get("streetAddress")
+    city = addr.get("addressLocality")
+    province = addr.get("addressRegion")
+    postal_code = addr.get("postalCode")
+
+    geo = place_data.get("geo") or {}
+    lat = float(geo["latitude"]) if geo.get("latitude") is not None else None
+    lng = float(geo["longitude"]) if geo.get("longitude") is not None else None
+
+    photo = place_data.get("photo") or {}
+    photo_url = photo.get("url")
+    bbox = _rew_insights_decode_mapbox_bbox_from_photo(photo_url)
+
+    # 2) Details panel (Type, Bedrooms, Size, Built, Bath, etc.)
+    details_container = soup.find("div", class_="insightsheader-details")
+    details: Dict[str, Any] = {}
+    as_of_date: Optional[date] = None
+
+    if details_container:
+        # <dl class="columnlist"><dt>Bedrooms</dt><dd>3</dd>...</dl>
+        for dl in details_container.select("dl.columnlist"):
+            dts = dl.find_all("dt")
+            dds = dl.find_all("dd")
+            for dt_tag, dd_tag in zip(dts, dds):
+                key = dt_tag.get_text(" ", strip=True).strip(":").lower()
+                val = dd_tag.get_text(" ", strip=True)
+                details[key] = val
+
+        # e.g. "Last updated at 2023-01-04"
+        updated_span = details_container.find(
+            "span", class_="insightsheader-updated_date"
+        )
+        if updated_span:
+            txt = updated_span.get_text(strip=True)
+            m = re.search(r"(\d{4}-\d{2}-\d{2})", txt)
+            if m:
+                try:
+                    as_of_date = datetime.strptime(m.group(1), "%Y-%m-%d").date()
+                except Exception:
+                    as_of_date = None
+
+    beds = _rew_insights_parse_number(details.get("bedrooms"), float_ok=True)
+    baths = _rew_insights_parse_number(details.get("bath"), float_ok=True)
+    sqft = _rew_insights_parse_number(details.get("size"), float_ok=False)
+
+    year_built = None
+    m = re.search(r"(\d{4})", details.get("built", "") or "")
+    if m:
+        year_built = int(m.group(1))
+
+    return RewInsightsBasicInfo(
+        as_of_date=as_of_date,
+        street_address=street_address,
+        city=city,
+        province=province,
+        postal_code=postal_code,
+        lat=lat,
+        lng=lng,
+        bbox=bbox,
+        property_type=details.get("type"),
+        beds=beds,
+        baths=baths,
+        sqft=sqft,
+        year_built=year_built,
+        raw_place=place_data,
+        raw_details=details,
+    )
+
+
+def parse_rew_insights_assessment_history(soup: BeautifulSoup) -> List[Dict[str, Any]]:
+    """
+    Parse the 'Assessment history' section into a list of dicts with:
+      - assessment_year
+      - total_assessed_cad
+      - land_value
+      - building_value
+      - raw.labels (the original label strings)
+    """
+    out: List[Dict[str, Any]] = []
+    section_title = soup.find(
+        "div",
+        class_="columnsection-title",
+        string=re.compile(r"Assessment history", re.I),
+    )
+    if not section_title:
+        return out
+
+    body = section_title.find_parent("div", class_="columnsection-body")
+    if not body:
+        return out
+
+    details = body.find("div", class_="detailslist")
+    if not details:
+        return out
+
+    for row in details.select("div.detailslist-row"):
+        labels = [lab.get_text(" ", strip=True) for lab in row.select("div.detailslist-label")]
+        if len(labels) < 2:
+            continue
+
+        total_txt = labels[0]
+        date_txt = labels[-1]
+
+        total_val = _parse_int(total_txt)
+        land_val: Optional[int] = None
+        building_val: Optional[int] = None
+
+        for lab in labels[1:-1]:
+            if lab.startswith("Land"):
+                land_val = _parse_int(lab)
+            elif lab.startswith("Building"):
+                building_val = _parse_int(lab)
+
+        year = None
+        m = re.search(r"(\d{4})", date_txt)
+        if m:
+            year = int(m.group(1))
+
+        out.append(
+            {
+                "assessment_year": year,
+                "total_assessed_cad": total_val,
+                "land_value": land_val,
+                "building_value": building_val,
+                "raw": {"labels": labels},
+            }
+        )
+
+    return out
+
+
+def parse_rew_insights_sales_history(soup: BeautifulSoup) -> List[Dict[str, Any]]:
+    """
+    Parse the 'Sales history' section into a list of dicts with:
+      - sale_date (string; normalized to date in worker)
+      - sale_price_cad
+      - raw.labels / raw.values
+    """
+    out: List[Dict[str, Any]] = []
+    section_title = soup.find(
+        "div",
+        class_="columnsection-title",
+        string=re.compile(r"Sales history", re.I),
+    )
+    if not section_title:
+        return out
+
+    body = section_title.find_parent("div", class_="columnsection-body")
+    if not body:
+        return out
+
+    details = body.find("div", class_="detailslist")
+    if not details:
+        return out
+
+    for row in details.select("div.detailslist-row"):
+        labels = [lab.get_text(" ", strip=True) for lab in row.select("div.detailslist-label")]
+        values = [val.get_text(" ", strip=True) for val in row.select("div.detailslist-value")]
+
+        if not labels:
+            continue
+
+        price_txt = labels[0]
+        date_txt = labels[2] if len(labels) > 2 else None  # 'Sold' usually in labels[1]
+
+        price_val = _parse_int(price_txt)
+
+        out.append(
+            {
+                "sale_date": date_txt,
+                "sale_price_cad": price_val,
+                "raw": {
+                    "labels": labels,
+                    "values": values,
+                },
+            }
+        )
+
+    return out
+
+
+def parse_rew_insights_neighbourhood_links(
+    soup: BeautifulSoup,
+    page_url: str,
+    base_url: str = "https://www.rew.ca",
+) -> Dict[str, List[str]]:
+    """
+    Collect nearby Insights and listings from card carousels.
+
+    Categorize:
+      - /insights/...   -> insights_urls
+      - /properties/... -> listing_urls
+    """
+    insights: set[str] = set()
+    listings: set[str] = set()
+    others: set[str] = set()
+
+    parsed_page = urlparse(page_url)
+    canonical_path = parsed_page.path
+
+    for a in soup.select("a.previewcard-link, a.verticalcard-link"):
+        href = a.get("href")
+        if not href:
+            continue
+
+        full = urljoin(base_url, href)
+        if urlparse(full).path == canonical_path:
+            # skip self-link if any
+            continue
+
+        if "/insights/" in href:
+            insights.add(full)
+        elif "/properties/" in href:
+            listings.add(full)
+        else:
+            others.add(full)
+
+    return {
+        "insights_urls": sorted(insights),
+        "listing_urls": sorted(listings),
+        "other_urls": sorted(others),
+    }
+
+
+def parse_rew_insights(html: str, url: str) -> Dict[str, Any]:
+    """
+    High-level REW Insights parser that returns:
+      {
+        "url": url,
+        "basic": { ... },
+        "assessments": [...],
+        "sales": [...],
+        "neighbourhood_links": {
+            "insights_urls": [...],
+            "listing_urls": [...],
+            "other_urls": [...]
+        },
+      }
+    """
+    soup = BeautifulSoup(html, "html.parser")
+
+    basic_obj = _parse_rew_insights_basic_info(soup, url)
+    assessments = parse_rew_insights_assessment_history(soup)
+    sales = parse_rew_insights_sales_history(soup)
+    neighbourhood_links = parse_rew_insights_neighbourhood_links(soup, url)
+
+    return {
+        "url": url,
+        "basic": asdict(basic_obj),
+        "assessments": assessments,
+        "sales": sales,
+        "neighbourhood_links": neighbourhood_links,
+    }

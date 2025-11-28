@@ -20,6 +20,7 @@ from models import (
     Base,
     RewListing,
     RewListingUrl,
+    RewInsightsUrl,
     Sale,
     Assessment,
     Property,
@@ -79,7 +80,6 @@ def _pick_primary_source(source: str, preferred: List[str]) -> int:
     except ValueError:
         return len(preferred)
 
-
 def merge_assessments(assessments: List[Assessment]) -> List[Dict[str, Any]]:
     """
     Merge assessments by (property_id, assessment_year), preferring
@@ -118,7 +118,6 @@ def merge_assessments(assessments: List[Assessment]) -> List[Dict[str, Any]]:
         previous = row
 
     return merged_rows
-
 
 def merge_sales(sales: List[Sale]) -> List[Dict[str, Any]]:
     """
@@ -161,7 +160,6 @@ def merge_sales(sales: List[Sale]) -> List[Dict[str, Any]]:
 
     merged_rows.sort(key=lambda r: r["sale_date"], reverse=True)
     return merged_rows
-
 
 def merge_property_characteristics(chars: List[PropertyCharacteristics]) -> List[Dict[str, Any]]:
     """
@@ -228,7 +226,6 @@ def group_assessments_by_source(assessments: List[Assessment]) -> Dict[str, List
 
     return dict(by_source)
 
-
 def group_sales_by_source(sales: List[Sale]) -> Dict[str, List[Sale]]:
     """
     Return {source: [Sale, ...]} sorted by date desc.
@@ -241,7 +238,6 @@ def group_sales_by_source(sales: List[Sale]) -> Dict[str, List[Sale]]:
         rows.sort(key=lambda s: s.sale_date, reverse=True)
 
     return dict(by_source)
-
 
 def group_characteristics_by_source(chars: List[PropertyCharacteristics]) -> Dict[str, List[PropertyCharacteristics]]:
     """
@@ -265,7 +261,6 @@ async def on_startup():
     # Ensure tables exist (idempotent)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
@@ -353,6 +348,83 @@ async def home(request: Request):
         latest_rew_done = (
             await session.execute(latest_rew_done_stmt)
         ).scalars().first()
+
+        # --- REW Insights scraper panel ------------------------------------
+        total_rew_insights_urls_stmt = select(func.count(RewInsightsUrl.id))
+        total_rew_insights_urls = (
+            await session.execute(total_rew_insights_urls_stmt)
+        ).scalar() or 0
+
+        rew_insights_done_urls_stmt = select(func.count(RewInsightsUrl.id)).where(
+            RewInsightsUrl.status == "done"
+        )
+        rew_insights_done_urls = (
+            await session.execute(rew_insights_done_urls_stmt)
+        ).scalar() or 0
+
+        rew_insights_error_urls_stmt = select(func.count(RewInsightsUrl.id)).where(
+            RewInsightsUrl.status == "error"
+        )
+        rew_insights_error_urls = (
+            await session.execute(rew_insights_error_urls_stmt)
+        ).scalar() or 0
+
+        rew_insights_dead_urls_stmt = select(func.count(RewInsightsUrl.id)).where(
+            RewInsightsUrl.status == "dead"
+        )
+        rew_insights_dead_urls = (
+            await session.execute(rew_insights_dead_urls_stmt)
+        ).scalar() or 0
+
+        rew_insights_pending_urls = (
+            total_rew_insights_urls
+            - rew_insights_done_urls
+            - rew_insights_error_urls
+            - rew_insights_dead_urls
+        )
+
+        rew_insights_scrape_ratio = (
+            rew_insights_done_urls / total_rew_insights_urls
+            if total_rew_insights_urls > 0
+            else 0.0
+        )
+
+        # Latest discovered
+        latest_rew_insights_discovered_stmt = (
+            select(RewInsightsUrl)
+            .order_by(RewInsightsUrl.discovered_at.desc())
+            .limit(1)
+        )
+        latest_rew_insights_discovered = (
+            await session.execute(latest_rew_insights_discovered_stmt)
+        ).scalars().first()
+
+        # Latest successfully scraped
+        latest_rew_insights_done_stmt = (
+            select(RewInsightsUrl)
+            .where(RewInsightsUrl.status == "done")
+            .order_by(RewInsightsUrl.last_attempt_at.desc().nullslast())
+            .limit(1)
+        )
+        latest_rew_insights_done = (
+            await session.execute(latest_rew_insights_done_stmt)
+        ).scalars().first()
+
+        # Latest REW Insights properties (property characteristics)
+        latest_rew_insights_props_stmt = (
+            select(PropertyCharacteristics, Property)
+            .join(Property, Property.id == PropertyCharacteristics.property_id)
+            .where(PropertyCharacteristics.source == "rew_insights")
+            .order_by(
+                PropertyCharacteristics.scraped_at.desc().nullslast(),
+                PropertyCharacteristics.id.desc(),
+            )
+            .limit(10)
+        )
+
+        latest_rew_insights_props = (
+            await session.execute(latest_rew_insights_props_stmt)
+        ).all()
 
         # --- BC Assessment scraper panel ------------------------------------
         total_bca_urls_stmt = select(func.count(BCAssessmentUrl.id))
@@ -472,6 +544,16 @@ async def home(request: Request):
             "scrape_ratio": rew_scrape_ratio,
             "latest_discovered": latest_rew_discovered,
             "latest_done": latest_rew_done,
+            # REW Insights scraper stats
+            "total_rew_insights_urls": total_rew_insights_urls,
+            "rew_insights_done_urls": rew_insights_done_urls,
+            "rew_insights_pending_urls": rew_insights_pending_urls,
+            "rew_insights_error_urls": rew_insights_error_urls,
+            "rew_insights_dead_urls": rew_insights_dead_urls,
+            "rew_insights_scrape_ratio": rew_insights_scrape_ratio,
+            "latest_rew_insights_discovered": latest_rew_insights_discovered,
+            "latest_rew_insights_done": latest_rew_insights_done,
+            "latest_rew_insights_props": latest_rew_insights_props,
             # BC Assessment scraper stats
             "bca_done_urls": bca_done_urls,
             "bca_pending_urls": bca_pending_urls,
@@ -483,7 +565,6 @@ async def home(request: Request):
             "latest_bca_props": latest_bca_props,
         },
     )
-
 
 @app.get("/listings", response_class=HTMLResponse)
 async def listings(request: Request, page: int = 1, page_size: int = 20):
@@ -559,7 +640,6 @@ async def listing_detail(request: Request, listing_id: int):
             "raw_sales_by_source": raw_sales_by_source
         },
     )
-
 
 @app.get("/properties/search", name="properties_search", response_class=HTMLResponse)
 async def properties_search(
@@ -826,7 +906,6 @@ async def properties_search(
         },
     )
 
-
 @app.get("/properties/{property_id}", response_class=HTMLResponse)
 async def property_detail(request: Request, property_id: int):
     async with AsyncSessionLocal() as session:
@@ -894,7 +973,6 @@ async def property_detail(request: Request, property_id: int):
             "current_char": current_char,
         }
     )
-
 
 @app.get("/map", response_class=HTMLResponse)
 async def map_view( 
