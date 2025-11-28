@@ -18,9 +18,9 @@ body {
 }
 
 .container {
-  max-width: 1200px;
+  max-width: 1600px;
   margin: 0 auto;
-  padding: 24px 16px 40px;
+  padding: 24px 24px 40px;
 }
 
 h1 {
@@ -43,6 +43,35 @@ h3 {
   margin: 0 0 24px;
   color: var(--text-muted);
   font-size: 0.9rem;
+}
+
+/* --- Primary Button Style --- */
+
+.btn-primary-cta {
+  display: inline-block;
+  padding: 12px 24px;
+  background-color: var(--accent); /* Uses your existing accent color (#2563eb) */
+  color: white;
+  text-decoration: none;
+  font-weight: 600;
+  border-radius: 8px;
+  border: none;
+  text-align: center;
+  transition: background-color 0.2s ease-in-out;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+}
+
+.btn-primary-cta:hover {
+  background-color: #1d4ed8; /* Slightly darker shade on hover */
+}
+
+/* Style for placing the button next to the title */
+.header-actions {
+    /* Increased margin-bottom for space below the button */
+    margin-bottom: 24px; 
+    display: flex;
+    justify-content: space-between; 
+    align-items: center;
 }
 
 /* Global summary */
@@ -145,7 +174,12 @@ table {
   width: 100%;
   border-collapse: collapse;
   margin-top: 6px;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
+  min-width: 900px;
+}
+
+.table-wrapper {
+  overflow-x: auto;
 }
 
 th,
@@ -338,4 +372,111 @@ pre {
   font-size: 0.8rem;
   overflow-x: auto;
 }
+/* --- Filter Form Styles --- */
+
+.filters-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* The Grid: 4 columns on desktop, 2 on tablet, 1 on mobile */
+.filters-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr); 
+  gap: 16px 20px; /* Row gap, Column gap */
+  align-items: end; /* Aligns inputs to bottom so labels don't mismatch if they wrap */
+}
+
+/* Input container styling */
+.filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.filter-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+/* Make inputs look modern and fill the grid cell */
+.filter-field input,
+.filter-field select {
+  width: 100%; /* CRITICAL: Forces alignment */
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  background-color: #fff;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.filter-field input:focus,
+.filter-field select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+/* Span classes for layout control */
+.span-2 { grid-column: span 2; }
+.span-4 { grid-column: span 4; }
+
+/* Action buttons area */
+.filters-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  margin-top: 10px;
+}
+
+.btn-primary {
+  background-color: var(--accent);
+  color: white;
+  font-weight: 500;
+  padding: 8px 20px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.btn-primary:hover {
+  background-color: #1d4ed8;
+}
+
+.btn-secondary {
+  color: #4b5563;
+  text-decoration: none;
+  font-size: 0.9rem;
+  padding: 8px 16px;
+}
+
+.btn-secondary:hover {
+  color: #111827;
+  text-decoration: underline;
+}
+
+/* Responsive Breakpoints */
+@media (max-width: 900px) {
+  .filters-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .span-2 { grid-column: span 2; } /* Keep spanning full width of tablet */
+}
+
+@media (max-width: 600px) {
+  .filters-grid {
+    grid-template-columns: 1fr; /* Stack everything */
+  }
+  .span-2 { grid-column: span 1; }
+}
+
 
