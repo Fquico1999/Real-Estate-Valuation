@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Property Search</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='/dashboard.css') }}?v=2">
+</head>
+<body>
+  <div class="container">
+    <h1>Property Search</h1>
+
+    <p class="muted">
+      Price shown is the
+      <strong>latest listing price</strong>
+      for properties that are on market; otherwise it falls back to the
+      <strong>latest total assessed value</strong>.
+    </p>
+
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Filters</h2>
+        <div class="panel-subtitle">
+          Leave address blank to browse properties by characteristics.
+        </div>
+      </div>
+
+      <form method="get" class="filters-form">
+        <div class="filters-grid">
+            
+            <div class="filter-field span-2">
+            <label class="filter-label">Address Search</label>
+            <input 
+                type="text" 
+                name="q" 
+                value="{{ q }}" 
+                placeholder="e.g. 1234 W 10th Ave" 
+            />
+            </div>
+
+            <div class="filter-field">
+            <label class="filter-label">Neighbourhood</label>
+            <input 
+                type="text" 
+                name="neighbourhood" 
+                list="neighbourhood-options" 
+                value="{{ neighbourhood }}" 
+                placeholder="e.g. Kitsilano" 
+            />
+            <datalist id="neighbourhood-options">
+                {% for n in neighbourhood_options %}
+                <option value="{{ n }}"></option>
+                {% endfor %}
+            </datalist>
+            </div>
+
+            <div class="filter-field">
+            <label class="filter-label">Market Status</label>
+            <select name="on_market">
+                <option value="any" {% if on_market == "any" %}selected{% endif %}>Any Status</option>
+                <option value="on" {% if on_market == "on" %}selected{% endif %}>On Market (Active)</option>
+                <option value="off" {% if on_market == "off" %}selected{% endif %}>Off Market</option>
+            </select>
+            </div>
+
+            <div class="filter-field">
+            <label class="filter-label">Min Price</label>
+            <input type="number" name="min_price" min="0" step="50000" placeholder="$ Any" value="{{ min_price if min_price is not none else '' }}" />
+            </div>
+
+            <div class="filter-field">
+            <label class="filter-label">Max Price</label>
+            <input type="number" name="max_price" min="0" step="50000" placeholder="$ Any" value="{{ max_price if max_price is not none else '' }}" />
+            </div>
+
+            <div class="filter-field span-2">
+            <label class="filter-label">Property Type</label>
+            <select name="property_type">
+                <option value="">All Types</option>
+                {% for pt in property_types %}
+                <option value="{{ pt }}" {% if property_type == pt %}selected{% endif %}>{{ type_map.get(pt, pt)|title }}</option>
+                {% endfor %}
+            </select>
+            </div>
+
+            <div class="filter-field">
+            <label class="filter-label">Min Beds</label>
+            <input type="number" name="min_beds" min="0" placeholder="0" value="{{ min_beds if min_beds is not none else '' }}" />
+            </div>
+
+            <div class="filter-field">
+            <label class="filter-label">Max Beds</label>
+            <input type="number" name="max_beds" min="0" placeholder="Any" value="{{ max_beds if max_beds is not none else '' }}" />
+            </div>
+
+            <div class="filter-field">
+            <label class="filter-label">Min Baths</label>
+            <input type="number" name="min_baths" min="0" placeholder="0" value="{{ min_baths if min_baths is not none else '' }}" />
+            </div>
+
+            <div class="filter-field">
+            <label class="filter-label">Max Baths</label>
+            <input type="number" name="max_baths" min="0" placeholder="Any" value="{{ max_baths if max_baths is not none else '' }}" />
+            </div>
+
+            <div class="filter-field">
+            <label class="filter-label">Min Sqft</label>
+            <input type="number" name="min_sqft" min="0" step="50" placeholder="0" value="{{ min_sqft if min_sqft is not none else '' }}" />
+            </div>
+
+            <div class="filter-field">
+            <label class="filter-label">Max Sqft</label>
+            <input type="number" name="max_sqft" min="0" step="50" placeholder="Any" value="{{ max_sqft if max_sqft is not none else '' }}" />
+            </div>
+            
+            <div class="filter-field"></div>
+            <div class="filter-field"></div>
+
+        </div>
+
+        <div class="filters-actions">
+            <button type="submit" class="btn-primary">Search Properties</button>
+            <a href="{{ request.url_for('properties_search') }}" class="btn-secondary">Reset Filters</a>
+        </div>
+        </form>
+
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Results</h2>
+        <div class="panel-subtitle">
+          Showing up to 100 properties, ordered by
+          {% if q %}
+            closest address match then most recent scrape.
+          {% else %}
+            most recent scrape.
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="table-wrapper">
+        <table>
+            <tr>
+            <th>Address</th>
+            <th>Neighbourhood</th>
+            <th>City</th>
+            <th>Beds</th>
+            <th>Baths</th>
+            <th>Sqft</th>
+            <th>Type</th>
+            <th>Price</th>
+            <th>On Market?</th>
+            <th>Last Updated</th>
+            </tr>
+            {% for prop, char, assess, listing, recency in results %}
+            <tr>
+            <td>
+                <a href="{{ request.url_for('property_detail', property_id=prop.id) }}">
+                {{ prop.street_address or "(no address)" }},
+                {{ prop.city }}
+                </a>
+            </td>
+            <td>
+                {% if listing %}
+                {{ listing.neighbourhood }}
+                {% else %}
+                –
+                {% endif %}
+            </td>
+            <td>{{ prop.city }}</td>
+            <td>
+                {% if char and char.beds is not none %}
+                {{ char.beds }}
+                {% else %}
+                –
+                {% endif %}
+            </td>
+            <td>
+                {% if char and char.baths is not none %}
+                {{ char.baths }}
+                {% else %}
+                –
+                {% endif %}
+            </td>
+            <td>
+                {% if char and char.sqft_finished %}
+                {{ char.sqft_finished }}
+                {% else %}
+                –
+                {% endif %}
+            </td>
+            <td>
+                {% if listing and listing.property_type %}
+                {{ type_map.get(listing.property_type, listing.property_type)|title }}
+                {% else %}
+                –
+                {% endif %}
+            </td>
+            <td>
+                {% if listing and listing.price_cad %}
+                    ${{ "{:,}".format(listing.price_cad) }}
+                {% elif assessment and assessment.total_assessed_cad %}
+                    ${{ "{:,}".format(assessment.total_assessed_cad) }}
+                {% else %}
+                    —
+                {% endif %}
+                </td>
+            <td>
+                {% if listing %}
+                Yes
+                {% else %}
+                No
+                {% endif %}
+            </td>
+            <td>
+                {% if recency %}
+                    {{ recency.strftime('%d/%m/%Y') }}
+                {% else %}
+                    -
+                {% endif %}
+            </td>
+            </tr>
+            {% endfor %}
+        </table>
+    </div>
+      <div class="actions">
+        <a href="{{ request.url_for('home') }}" class="btn-link">
+          ← Back to dashboard
+        </a>
+      </div>
+    </section>
+  </div>
+</body>
+</html>

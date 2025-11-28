@@ -2,7 +2,7 @@
 <html>
 <head>
   <title>Real Estate Pipeline Dashboard</title>
-  <link rel="stylesheet" href="{{ url_for('static', path='dashboard.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', path='/dashboard.css') }}?v=1">
 </head>
 <body>
   <div class="container">
@@ -53,6 +53,12 @@
         </div>
       </div>
     </section>
+
+    <div class="header-actions">      
+      <a href="{{ request.url_for('properties_search') }}" class="btn-primary-cta">
+        🔍 Search Properties
+      </a>
+    </div>
 
     <!-- REW Scraper Panel -->
     <section class="panel">
