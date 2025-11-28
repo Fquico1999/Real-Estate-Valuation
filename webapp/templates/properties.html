@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Property Search</title>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', path='/dashboard.css') }}?v=1"
+    />
+  </head>
+  <body>
+    <div class="container">
+      <h1>Property search</h1>
+      <p class="page-subtitle">
+        Default view shows the last 100 properties by most recent scraped data.
+        Use the filters below to narrow down by address and features.
+      </p>
+
+      <!-- Filters panel -->
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Search &amp; filters</h2>
+          <div class="panel-subtitle">
+            Leave address blank to search purely by features.
+          </div>
+        </div>
+
+        <form method="get" action="{{ request.url_for('properties_search') }}">
+          <div class="two-col">
+            <div>
+              <h3>Address</h3>
+              <label class="field-label">
+                <span class="muted">Address contains</span>
+                <input
+                  type="text"
+                  name="q"
+                  value="{{ query }}"
+                  placeholder="e.g. 1234 Main Street"
+                  style="width: 100%; padding: 6px 8px; margin-top: 4px;"
+                />
+              </label>
+
+              <h3 style="margin-top: 16px;">Price (assessment CAD)</h3>
+              <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <label class="field-label" style="flex: 1 1 120px;">
+                  <span class="muted">Min price</span>
+                  <input
+                    type="number"
+                    name="min_price"
+                    min="0"
+                    step="50000"
+                    value="{{ min_price or '' }}"
+                    placeholder="e.g. 800000"
+                    style="width: 100%; padding: 6px 8px; margin-top: 4px;"
+                  />
+                </label>
+                <label class="field-label" style="flex: 1 1 120px;">
+                  <span class="muted">Max price</span>
+                  <input
+                    type="number"
+                    name="max_price"
+                    min="0"
+                    step="50000"
+                    value="{{ max_price or '' }}"
+                    placeholder="e.g. 1500000"
+                    style="width: 100%; padding: 6px 8px; margin-top: 4px;"
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div>
+              <h3>Bedrooms &amp; bathrooms</h3>
+              <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <label class="field-label" style="flex: 1 1 90px;">
+                  <span class="muted">Min beds</span>
+                  <input
+                    type="number"
+                    name="min_beds"
+                    min="0"
+                    step="1"
+                    value="{{ min_beds or '' }}"
+                    placeholder="e.g. 2"
+                    style="width: 100%; padding: 6px 8px; margin-top: 4px;"
+                  />
+                </label>
+                <label class="field-label" style="flex: 1 1 90px;">
+                  <span class="muted">Max beds</span>
+                  <input
+                    type="number"
+                    name="max_beds"
+                    min="0"
+                    step="1"
+                    value="{{ max_beds or '' }}"
+                    placeholder="e.g. 4"
+                    style="width: 100%; padding: 6px 8px; margin-top: 4px;"
+                  />
+                </label>
+                <label class="field-label" style="flex: 1 1 90px;">
+                  <span class="muted">Min baths</span>
+                  <input
+                    type="number"
+                    name="min_baths"
+                    min="0"
+                    step="1"
+                    value="{{ min_baths or '' }}"
+                    placeholder="e.g. 2"
+                    style="width: 100%; padding: 6px 8px; margin-top: 4px;"
+                  />
+                </label>
+                <label class="field-label" style="flex: 1 1 90px;">
+                  <span class="muted">Max baths</span>
+                  <input
+                    type="number"
+                    name="max_baths"
+                    min="0"
+                    step="1"
+                    value="{{ max_baths or '' }}"
+                    placeholder="e.g. 3"
+                    style="width: 100%; padding: 6px 8px; margin-top: 4px;"
+                  />
+                </label>
+              </div>
+
+              <h3 style="margin-top: 16px;">Sqft, type &amp; neighbourhood</h3>
+              <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <label class="field-label" style="flex: 1 1 120px;">
+                  <span class="muted">Min sqft (finished)</span>
+                  <input
+                    type="number"
+                    name="min_sqft"
+                    min="0"
+                    step="50"
+                    value="{{ min_sqft or '' }}"
+                    placeholder="e.g. 800"
+                    style="width: 100%; padding: 6px 8px; margin-top: 4px;"
+                  />
+                </label>
+                <label class="field-label" style="flex: 1 1 120px;">
+                  <span class="muted">Max sqft (finished)</span>
+                  <input
+                    type="number"
+                    name="max_sqft"
+                    min="0"
+                    step="50"
+                    value="{{ max_sqft or '' }}"
+                    placeholder="e.g. 2500"
+                    style="width: 100%; padding: 6px 8px; margin-top: 4px;"
+                  />
+                </label>
+              </div>
+
+              <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px;">
+                <label class="field-label" style="flex: 1 1 160px;">
+                  <span class="muted">Property type (from REW)</span>
+                  <select
+                    name="property_type"
+                    style="width: 100%; padding: 6px 8px; margin-top: 4px;"
+                  >
+                    <option value="">Any</option>
+                    {% for pt in property_types %}
+                      <option
+                        value="{{ pt }}"
+                        {% if property_type == pt %}selected{% endif %}
+                      >
+                        {{ pt }}
+                      </option>
+                    {% endfor %}
+                  </select>
+                </label>
+
+                <label class="field-label" style="flex: 1 1 160px;">
+                  <span class="muted">Neighbourhood (from REW)</span>
+                  <select
+                    name="neighbourhood"
+                    style="width: 100%; padding: 6px 8px; margin-top: 4px;"
+                  >
+                    <option value="">Any</option>
+                    {% for n in neighbourhoods %}
+                      <option
+                        value="{{ n }}"
+                        {% if neighbourhood == n %}selected{% endif %}
+                      >
+                        {{ n }}
+                      </option>
+                    {% endfor %}
+                  </select>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="actions" style="margin-top: 16px;">
+            <button type="submit" class="btn-link">
+              Apply filters
+            </button>
+            <a
+              href="{{ request.url_for('properties_search') }}"
+              class="btn-link"
+              style="margin-left: 8px;"
+            >
+              Reset
+            </a>
+            <a
+              href="{{ request.url_for('home') }}"
+              class="btn-link"
+              style="margin-left: auto;"
+            >
+              Back to dashboard
+            </a>
+          </div>
+        </form>
+      </section>
+
+      <!-- Results panel -->
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Results</h2>
+          <div class="panel-subtitle">
+            Showing {{ properties|length }} properties
+          </div>
+        </div>
+
+        <table>
+          <tr>
+            <th>Address</th>
+            <th>Neighbourhood</th>
+            <th>Type</th>
+            <th>Beds</th>
+            <th>Baths</th>
+            <th>Finished ft²</th>
+            <th>Price</th>
+            <th>Last scraped</th>
+          </tr>
+          {% for row in properties %}
+            {% set prop = row.property %}
+            {% set char = row.char %}
+            {% set assessment = row.assessment %}
+            {% set listing = row.listing %}
+            <tr>
+              <td>
+                <a href="{{ request.url_for('property_detail', property_id=prop.id) }}">
+                  {{ prop.street_address }}, {{ prop.city }}
+                </a>
+              </td>
+              <td>
+                {% if listing and listing.neighbourhood %}
+                  {{ listing.neighbourhood }}
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+              <td>
+                {% if listing %}
+                  {{ listing.property_type_human or listing.property_type or "—" }}
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+              <td>{{ char.beds if char and char.beds is not none else "—" }}</td>
+              <td>{{ char.baths if char and char.baths is not none else "—" }}</td>
+              <td>
+                {% if char and char.sqft_finished %}
+                  {{ "{:,}".format(char.sqft_finished) }}
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+              <td>
+                {% if listing and listing.price_cad %}
+                  ${{ "{:,}".format(listing.price_cad) }}
+                {% elif assessment and assessment.total_assessed_cad %}
+                  ${{ "{:,}".format(assessment.total_assessed_cad) }}
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+              <td>{{ row.last_scraped_at or "—" }}</td>
+            </tr>
+          {% endfor %}
+        </table>
+      </section>
+    </div>
+  </body>
+</html>
