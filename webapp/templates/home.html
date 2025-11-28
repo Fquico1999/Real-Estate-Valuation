@@ -146,6 +146,88 @@
 
     </section>
 
+    <!-- REW Insights Scraper Panel -->
+    <section class="panel">
+      <div class="panel-header">
+        <h2>REW Insights Scraper</h2>
+      </div>
+
+      <div class="stats-list">
+        <span>Total Insights URLs discovered: <strong>{{ total_rew_insights_urls }}</strong></span>
+        <span>Done: <strong>{{ rew_insights_done_urls }}</strong></span>
+        <span>Pending: <strong>{{ rew_insights_pending_urls }}</strong></span>
+        <span>Error: <strong>{{ rew_insights_error_urls }}</strong></span>
+        <span>Dead: <strong>{{ rew_insights_dead_urls }}</strong></span>
+        <span>Scraped ratio:
+          <strong>
+            {% if rew_insights_scrape_ratio %}
+              {{ "%.1f" % (rew_insights_scrape_ratio * 100) }}%
+            {% else %}
+              0.0%
+            {% endif %}
+          </strong>
+        </span>
+      </div>
+
+      <p class="muted">
+        Latest discovered REW Insights URL:
+        {% if latest_rew_insights_discovered %}
+          <code>{{ latest_rew_insights_discovered.url }}</code>
+        {% else %}
+          None yet
+        {% endif %}
+        <br>
+        Latest successfully scraped REW Insights URL:
+        {% if latest_rew_insights_done %}
+          <code>{{ latest_rew_insights_done.url }}</code>
+        {% else %}
+          None yet
+        {% endif %}
+      </p>
+
+      <h3>Latest REW Insights properties</h3>
+      <table>
+        <tr>
+          <th>Scraped At</th>
+          <th>Address</th>
+          <th>Beds</th>
+          <th>Baths</th>
+          <th>Building Sqft</th>
+          <th>Lot Sqft</th>
+          <th>Year Built</th>
+          <th>As of Date</th>
+        </tr>
+        {% for char, prop in latest_rew_insights_props %}
+        <tr>
+          <td>{{ char.scraped_at }}</td>
+          <td>
+            {% if prop %}
+              <a href="{{ request.url_for('property_detail', property_id=prop.id) }}">
+                {{ prop.street_address }}, {{ prop.city }}
+              </a>
+            {% else %}
+              (no linked property)
+            {% endif %}
+          </td>
+          <td>{{ char.beds }}</td>
+          <td>{{ char.baths }}</td>
+          <td>
+            {% if char.sqft_finished %}
+              {{ char.sqft_finished }}
+            {% elif char.sqft_unfinished %}
+              {{ char.sqft_unfinished }}
+            {% else %}
+              – 
+            {% endif %}
+          </td>
+          <td>{{ char.lot_sqft }}</td>
+          <td>{{ char.year_built }}</td>
+          <td>{{ char.as_of_date }}</td>
+        </tr>
+        {% endfor %}
+      </table>
+    </section>
+
     <!-- BC Assessment Scraper Panel -->
     <section class="panel">
       <div class="panel-header">
