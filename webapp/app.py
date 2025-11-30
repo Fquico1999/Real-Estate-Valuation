@@ -8,12 +8,12 @@ from datetime import datetime, date
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.staticfiles import StaticFiles
-from fastapi import Query
+from fastapi import Query, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, load_only
 from sqlalchemy import select, func, and_, or_, update
 
 from models import (
@@ -604,7 +604,6 @@ async def reset_dead_urls(request: Request, queue_name: str):
         status_code=303,
     )
 
-
 @app.get("/listings", response_class=HTMLResponse)
 async def listings(request: Request, page: int = 1, page_size: int = 20):
     offset = (page - 1) * page_size
@@ -1032,6 +1031,21 @@ async def map_view(
     async with AsyncSessionLocal() as session:
         stmt = (
             select(RewListing)
+            .options(
+                load_only(
+                    RewListing.id,
+                    RewListing.lat,
+                    RewListing.lng,
+                    RewListing.price_cad,
+                    RewListing.street_address,
+                    RewListing.city,
+                    RewListing.neighbourhood,
+                    RewListing.rew_url,
+                    RewListing.beds,
+                    RewListing.baths,
+                    RewListing.sqft,
+                )
+            )
             .where(RewListing.lat.isnot(None), RewListing.lng.isnot(None))
             )
         # Apply filters if provided
@@ -1047,7 +1061,7 @@ async def map_view(
         stmt = (
             stmt
             .order_by(RewListing.scraped_at.desc())
-            .limit(2000)  # hardcoded cap. To be replaced by dynamic loading later.
+            .limit(10000)  # hardcoded cap. To be replaced by dynamic loading later.
         )
 
         rows = (await session.execute(stmt)).scalars().all()

@@ -195,7 +195,11 @@
     }).addTo(map);
 
     // Create a marker cluster group
-    const clusterGroup = L.markerClusterGroup();
+    const clusterGroup = L.markerClusterGroup({
+      chunkedLoading: true,
+      chunkDelay: 20,   // ms between chunks
+      chunkSize: 1000,   // markers per batch
+    });
 
     // Keep a lookup from listing id -> marker
     const markerById = new Map();
