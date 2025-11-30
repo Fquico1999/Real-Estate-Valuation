@@ -142,6 +142,21 @@
         <a href="{{ request.url_for('map_view') }}" class="btn-link">
           View listings on map
         </a>
+
+        <form
+          method="post"
+          action="{{ request.url_for('reset_dead_urls', queue_name='rew') }}"
+          style="display:inline"
+          onsubmit="return confirm('Move ALL dead REW listing URLs back to pending?');"
+        >
+          <button
+            type="submit"
+            class="btn-link"
+            {% if rew_dead_urls == 0 %}disabled{% endif %}
+          >
+            Reset dead URLs
+          </button>
+        </form>
       </div>
 
     </section>
@@ -226,6 +241,22 @@
         </tr>
         {% endfor %}
       </table>
+      <div class="actions">
+        <form
+          method="post"
+          action="{{ request.url_for('reset_dead_urls', queue_name='rew_insights') }}"
+          style="display:inline"
+          onsubmit="return confirm('Move ALL dead REW Insights URLs back to pending?');"
+        >
+          <button
+            type="submit"
+            class="btn-link"
+            {% if rew_insights_dead_urls == 0 %}disabled{% endif %}
+          >
+            Reset dead URLs
+          </button>
+        </form>
+      </div>
     </section>
 
     <!-- BC Assessment Scraper Panel -->
@@ -308,6 +339,22 @@
         </tr>
         {% endfor %}
       </table>
+      <div class="actions">
+        <form
+          method="post"
+          action="{{ request.url_for('reset_dead_urls', queue_name='bca') }}"
+          style="display:inline"
+          onsubmit="return confirm('Move ALL dead BC Assessment URLs back to pending?');"
+        >
+          <button
+            type="submit"
+            class="btn-link"
+            {% if bca_dead_urls == 0 %}disabled{% endif %}
+          >
+            Reset dead URLs
+          </button>
+        </form>
+      </div>
     </section>
     
     <!-- Geocoding Coverage Panel -->

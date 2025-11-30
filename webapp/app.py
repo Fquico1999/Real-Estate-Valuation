@@ -9,12 +9,12 @@ from datetime import datetime, date
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi import Query
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy import select, func, and_, or_
+from sqlalchemy import select, func, and_, or_, update
 
 from models import (
     Base,
@@ -565,6 +565,45 @@ async def home(request: Request):
             "latest_bca_props": latest_bca_props,
         },
     )
+
+@app.post("/admin/queues/{queue_name}/reset-dead", response_class=RedirectResponse)
+async def reset_dead_urls(request: Request, queue_name: str):
+    """
+    Dev tool: move all 'dead' URLs for a queue back to 'pending'.
+
+    Queues:
+      - rew          -> RewListingUrl
+      - rew_insights -> RewInsightsUrl
+      - bca          -> BCAssessmentUrl
+    """
+    if queue_name == "rew":
+        model = RewListingUrl
+    elif queue_name == "rew_insights":
+        model = RewInsightsUrl
+    elif queue_name == "bca":
+        model = BCAssessmentUrl
+    else:
+        raise HTTPException(status_code=404, detail="Unknown queue")
+
+    async with AsyncSessionLocal() as session:
+        await session.execute(
+            update(model)
+            .where(model.status == "dead")
+            .values(
+                status="pending",
+                attempts=0,
+                last_error=None,
+                last_attempt_at=None,
+            )
+        )
+        await session.commit()
+
+    # POST/Redirect/GET back to dashboard
+    return RedirectResponse(
+        url=request.url_for("home"),
+        status_code=303,
+    )
+
 
 @app.get("/listings", response_class=HTMLResponse)
 async def listings(request: Request, page: int = 1, page_size: int = 20):

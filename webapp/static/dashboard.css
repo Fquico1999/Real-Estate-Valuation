@@ -219,6 +219,18 @@ th {
 .btn-link:hover {
   background: rgba(37, 99, 235, 0.06);
 }
+/* Disabled button override */
+button.btn-link:disabled,
+button.btn-link:disabled:hover,
+button.btn-link:disabled:focus {
+  opacity: 0.4 !important;
+  cursor: not-allowed !important;
+  color: #9ca3af !important;
+  border-color: #d1d5db !important;
+  text-decoration: none !important;
+  pointer-events: none !important;
+}
+
 
 /* Responsive tweaks */
 
