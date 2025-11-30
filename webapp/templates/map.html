@@ -204,40 +204,80 @@
     // Keep a lookup from listing id -> marker
     const markerById = new Map();
 
-    listingPoints.forEach((item) => {
-        if (item.lat == null || item.lng == null) return;
+    // Debounce helper
+    function debounce(fn, delay) {
+      let timeout;
+      return (...args) => {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => fn(...args), delay);
+      };
+    }
 
-        const price = item.price
+    function addListingMarker(item) {
+      if (item.lat == null || item.lng == null) return;
+
+      const price = item.price
         ? "$" + item.price.toLocaleString()
         : "Price unknown";
-    
-        // Build a compact "3 bd • 2 ba • 1,234 sqft" line
-        const detailsParts = [];
-        if (item.beds != null) detailsParts.push(`${item.beds} bd`);
-        if (item.baths != null) detailsParts.push(`${item.baths} ba`);
-        if (item.sqft != null) detailsParts.push(`${item.sqft.toLocaleString()} sqft`);
-        const detailsLine = detailsParts.join(" • ");
 
-        const popupHtml = `
-            <div>
-                <strong>${price}</strong><br/>
-                ${detailsLine ? detailsLine + "<br/>" : ""}
-                ${item.address ? item.address : "No address"}<br/>
-                ${item.city || ""} ${item.neighbourhood || ""}<br/>
-                ${item.url ? `<a href="${item.url}" target="_blank" rel="noopener noreferrer">View on REW</a>` : ""}
-                <br/>
-                ${item.detail_url ? `<a href="${item.detail_url}">View details</a>` : ""}
-            </div>
-            `;
+      const detailsParts = [];
+      if (item.beds != null) detailsParts.push(`${item.beds} bd`);
+      if (item.baths != null) detailsParts.push(`${item.baths} ba`);
+      if (item.sqft != null) detailsParts.push(`${item.sqft.toLocaleString()} sqft`);
+      const detailsLine = detailsParts.join(" • ");
 
-        const marker = L.marker([item.lat, item.lng]).bindPopup(popupHtml);
-        const label = `${price} – ${item.city || ""} ${item.neighbourhood || ""}`.trim();
-        marker.bindTooltip(label, { direction: "top" });
+      const popupHtml = `
+          <div>
+            <strong>${price}</strong><br/>
+            ${detailsLine ? detailsLine + "<br/>" : ""}
+            ${item.address ? item.address : "No address"}<br/>
+            ${item.city || ""} ${item.neighbourhood || ""}<br/>
+            ${item.url ? `<a href="${item.url}" target="_blank" rel="noopener noreferrer">View on REW</a>` : ""}
+            <br/>
+          </div>
+        `;
 
-        // Add marker to the cluster group instead of directly to the map
-        clusterGroup.addLayer(marker);
-        markerById.set(item.id, marker);
-    });
+      const marker = L.marker([item.lat, item.lng]).bindPopup(popupHtml);
+      const label = `${price} – ${item.city || ""} ${item.neighbourhood || ""}`.trim();
+      marker.bindTooltip(label, { direction: "top" });
+
+      clusterGroup.addLayer(marker);
+      markerById.set(item.id, marker);
+    }
+
+    // Fetch listings for current map bounds
+    async function loadListingsForBounds() {
+      const bounds = map.getBounds();
+      const zoom = map.getZoom();
+
+      const params = new URLSearchParams({
+        min_lat: bounds.getSouth(),
+        max_lat: bounds.getNorth(),
+        min_lng: bounds.getWest(),
+        max_lng: bounds.getEast(),
+        zoom: zoom,
+        min_price: document.querySelector('input[name="min_price"]').value || "",
+        max_price: document.querySelector('input[name="max_price"]').value || "",
+        min_beds: document.querySelector('input[name="min_beds"]').value || "",
+        min_baths: document.querySelector('input[name="min_baths"]').value || "",
+      });
+
+      const resp = await fetch(`/api/map/listings?${params.toString()}`);
+      if (!resp.ok) {
+        console.error("Failed to load listings");
+        return;
+      }
+
+      const data = await resp.json();
+
+      // Reset and add new markers
+      clusterGroup.clearLayers();
+      markerById.clear();
+
+      data.listings.forEach(addListingMarker);
+    }
+
+    listingPoints.forEach(addListingMarker);
 
     // Add the cluster group to the map
     map.addLayer(clusterGroup);
@@ -255,6 +295,12 @@
         });
       }
     }
+    // Load new listings when the map stops moving
+    //const debouncedLoad = debounce(loadListingsForBounds, 300);
+    //map.on("moveend", debouncedLoad);
+
+    // Trigger once on page load
+    //debouncedLoad();
   </script>
 </body>
 </html>

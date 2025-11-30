@@ -6,9 +6,8 @@ from collections import defaultdict
 from typing import Optional, Dict, List, Any
 from datetime import datetime, date
 
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
-from fastapi import Query, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
@@ -1011,6 +1010,92 @@ async def property_detail(request: Request, property_id: int):
             "current_char": current_char,
         }
     )
+
+
+@app.get("/api/map/listings")
+async def map_listings_api(
+    min_lat: float = Query(..., description="Current map south edge"),
+    max_lat: float = Query(..., description="Current map north edge"),
+    min_lng: float = Query(..., description="Current map west edge"),
+    max_lng: float = Query(..., description="Current map east edge"),
+    zoom: int = Query(..., description="Current map zoom"),
+    min_price: Optional[str] = Query(default=None),
+    max_price: Optional[str] = Query(default=None),
+    min_beds: Optional[str] = Query(default=None),
+    min_baths: Optional[str] = Query(default=None),
+):
+    # Reuse your helper
+    min_price_int = parse_int(min_price)
+    max_price_int = parse_int(max_price)
+    min_beds_int = parse_int(min_beds)
+    min_baths_int = parse_int(min_baths)
+
+    async with AsyncSessionLocal() as session:
+        stmt = (
+            select(RewListing)
+            .options(
+                load_only(
+                    RewListing.id,
+                    RewListing.lat,
+                    RewListing.lng,
+                    RewListing.price_cad,
+                    RewListing.street_address,
+                    RewListing.city,
+                    RewListing.neighbourhood,
+                    RewListing.rew_url,
+                    RewListing.beds,
+                    RewListing.baths,
+                    RewListing.sqft,
+                )
+            )
+            .where(
+                RewListing.lat.isnot(None),
+                RewListing.lng.isnot(None),
+                RewListing.lat >= min_lat,
+                RewListing.lat <= max_lat,
+                RewListing.lng >= min_lng,
+                RewListing.lng <= max_lng,
+            )
+        )
+
+        # Same filters as /map
+        if min_price_int is not None:
+            stmt = stmt.where(RewListing.price_cad >= min_price_int)
+        if max_price_int is not None:
+            stmt = stmt.where(RewListing.price_cad <= max_price_int)
+        if min_beds_int is not None:
+            stmt = stmt.where(RewListing.beds >= min_beds_int)
+        if min_baths_int is not None:
+            stmt = stmt.where(RewListing.baths >= min_baths_int)
+
+        stmt = (
+            stmt
+            .order_by(RewListing.scraped_at.desc())
+            .limit(10000)  # safety cap
+        )
+
+        rows = (await session.execute(stmt)).scalars().all()
+
+    listing_points = [
+        {
+            "id": l.id,
+            "lat": l.lat,
+            "lng": l.lng,
+            "price": l.price_cad,
+            "address": l.street_address,
+            "city": l.city,
+            "neighbourhood": l.neighbourhood,
+            "url": l.rew_url,
+            "beds": l.beds,
+            "baths": l.baths,
+            "sqft": l.sqft,
+        }
+        for l in rows
+        if l.lat is not None and l.lng is not None
+    ]
+
+    return {"listings": listing_points}
+
 
 @app.get("/map", response_class=HTMLResponse)
 async def map_view( 
