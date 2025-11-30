@@ -52,6 +52,9 @@ PROPERTY_TYPE_DISPLAY_MAP = {
     "townhouse": "Townhouse",
 }
 
+# Level of map zoom required before showing property bboxes
+ZOOM_FOR_BBOXES = 15
+
 engine = create_async_engine(DATABASE_URL, echo=False, future=True)
 AsyncSessionLocal = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 templates = Jinja2Templates(directory="templates")
@@ -1095,6 +1098,77 @@ async def map_listings_api(
     ]
 
     return {"listings": listing_points}
+
+@app.get("/api/map/properties/bboxes")
+async def map_property_bboxes_api(
+    min_lat: float = Query(..., description="Current map south edge"),
+    max_lat: float = Query(..., description="Current map north edge"),
+    min_lng: float = Query(..., description="Current map west edge"),
+    max_lng: float = Query(..., description="Current map east edge"),
+    zoom: int = Query(..., description="Current map zoom"),
+):
+    # Only show bounding boxes when zoomed in enough
+    if zoom < ZOOM_FOR_BBOXES:
+        return {"properties": []}
+
+    async with AsyncSessionLocal() as session:
+        stmt = (
+            select(Property)
+            .options(
+                load_only(
+                    Property.id,
+                    Property.lat,
+                    Property.lng,
+                    Property.bbox,
+                    Property.street_address,
+                    Property.city,
+                    Property.postal_code,
+                )
+            )
+            .where(
+                Property.lat.isnot(None),
+                Property.lng.isnot(None),
+                Property.bbox.isnot(None),
+                Property.lat >= min_lat,
+                Property.lat <= max_lat,
+                Property.lng >= min_lng,
+                Property.lng <= max_lng,
+            )
+            .limit(3000)  # safety cap; adjust as needed
+        )
+
+        rows = (await session.execute(stmt)).scalars().all()
+
+    props = []
+    for p in rows:
+        bbox = p.bbox or {}
+        south = bbox.get("south")
+        north = bbox.get("north")
+        west = bbox.get("west")
+        east = bbox.get("east")
+
+        # Only include if bbox looks valid
+        if None in (south, north, west, east):
+            continue
+
+        props.append(
+            {
+                "id": p.id,
+                "lat": p.lat,
+                "lng": p.lng,
+                "bbox": {
+                    "south": south,
+                    "north": north,
+                    "west": west,
+                    "east": east,
+                },
+                "address": p.street_address,
+                "city": p.city,
+                "postal_code": p.postal_code,
+            }
+        )
+
+    return {"properties": props}
 
 
 @app.get("/map", response_class=HTMLResponse)

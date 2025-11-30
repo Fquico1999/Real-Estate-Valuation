@@ -204,6 +204,9 @@
     // Keep a lookup from listing id -> marker
     const markerById = new Map();
 
+    // Layer group for property bounding boxes
+    const propertyBboxLayer = L.layerGroup().addTo(map);
+
     // Debounce helper
     function debounce(fn, delay) {
       let timeout;
@@ -277,6 +280,81 @@
       data.listings.forEach(addListingMarker);
     }
 
+    const BBOX_MIN_ZOOM = 15;
+
+    function addPropertyBbox(prop) {
+      if (!prop.bbox) return;
+
+      const { south, north, west, east } = prop.bbox;
+      if (
+        south == null ||
+        north == null ||
+        west == null ||
+        east == null
+      ) {
+        return;
+      }
+
+      const bounds = [
+        [south, west],
+        [north, east],
+      ];
+
+      const addressLine = prop.address || "Unnamed Property";
+      const locationLine = [prop.city, prop.postal_code].filter(Boolean).join(" ");
+
+      // Property details URL (assuming you have such a route)
+      const detailUrl = `/properties/${prop.id}`;
+
+      const popupHtml = `
+        <div style="font-size: 14px; line-height: 1.3;">
+          <strong>${addressLine}</strong><br/>
+          ${locationLine ? locationLine + "<br/><br/>" : "<br/>"}
+          <a href="${detailUrl}" target="_blank" rel="noopener noreferrer">
+            View Property Details
+          </a>
+        </div>
+      `;
+
+      const rect = L.rectangle(bounds, {
+        weight: 1,
+        fillOpacity: 0.1,
+      }).bindPopup(popupHtml);
+
+      propertyBboxLayer.addLayer(rect);
+    }
+
+    // Fetch property bounding boxes for current map bounds
+    async function loadPropertyBboxesForBounds() {
+      const bounds = map.getBounds();
+      const zoom = map.getZoom();
+
+      // Only load when zoomed in enough
+      if (zoom < BBOX_MIN_ZOOM) {
+        propertyBboxLayer.clearLayers();
+        return;
+      }
+
+      const params = new URLSearchParams({
+        min_lat: bounds.getSouth(),
+        max_lat: bounds.getNorth(),
+        min_lng: bounds.getWest(),
+        max_lng: bounds.getEast(),
+        zoom: zoom,
+      });
+
+      const resp = await fetch(`/api/map/properties/bboxes?${params.toString()}`);
+      if (!resp.ok) {
+        console.error("Failed to load property bboxes");
+        return;
+      }
+
+      const data = await resp.json();
+
+      propertyBboxLayer.clearLayers();
+      (data.properties || []).forEach(addPropertyBbox);
+    }
+    
     listingPoints.forEach(addListingMarker);
 
     // Add the cluster group to the map
@@ -301,6 +379,13 @@
 
     // Trigger once on page load
     //debouncedLoad();
+
+    // Load property bounding boxes when the map stops moving
+    const debouncedBboxLoad = debounce(loadPropertyBboxesForBounds, 300);
+    map.on("moveend", debouncedBboxLoad);
+
+    // Trigger once on page load
+    debouncedBboxLoad();
   </script>
 </body>
 </html>
