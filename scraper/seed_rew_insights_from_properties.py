@@ -21,6 +21,7 @@ import asyncio
 import logging
 import pathlib
 import random
+import time
 
 from datetime import datetime, date
 from typing import Any, Dict, List, Optional
@@ -56,8 +57,92 @@ INSIGHTS_AUTOCOMPLETE_PATH = "/insights/autocomplete"
 # Tunables
 BATCH_SIZE = 5
 EMPTY_SLEEP_SECONDS = 60
-PER_PROPERTY_SLEEP_SECONDS = 1
+PER_PROPERTY_SLEEP_SECONDS = 2
 
+# Minimum spacing between any two REW requests in this process (seconds)
+MIN_SECONDS_BETWEEN_REW_REQUESTS = 2.5 
+
+# Max number of retries on HTTP 429
+MAX_429_RETRIES = 3 
+
+_last_rew_request_ts: float = 0.0 
+
+
+
+def _sleep_blocking(seconds: float):
+    """Blocking sleep helper used inside get_rew."""
+    if seconds > 0:
+        time.sleep(seconds)
+
+
+def get_rew( 
+    url: str,
+    *,
+    params: Optional[dict] = None,
+    headers: Optional[dict] = None,
+    timeout: int = 30,
+) -> requests.Response:
+    """
+    Centralized helper to call rew.ca with:
+      - simple global rate limiting
+      - 429-aware retry & exponential backoff
+
+    This is synchronous and uses blocking sleep. That's acceptable here because
+    the seeder is essentially single-threaded and already uses sync requests.
+    """
+    global _last_rew_request_ts
+
+    base_headers = {
+        "User-Agent": "Mozilla/5.0 (rew-insights-seeder)",
+        "Accept": "text/html,application/json;q=0.9,*/*;q=0.8",
+    }
+    if headers:
+        base_headers.update(headers)
+
+    backoff = MIN_SECONDS_BETWEEN_REW_REQUESTS
+
+    for attempt in range(1, MAX_429_RETRIES + 1):
+        # Enforce minimum spacing between any two REW requests in this process
+        now = time.time()
+        wait_for = _last_rew_request_ts + MIN_SECONDS_BETWEEN_REW_REQUESTS - now
+        if wait_for > 0:
+            _sleep_blocking(wait_for)
+
+        resp = requests.get(
+            url,
+            params=params,
+            headers=base_headers,
+            timeout=timeout,
+        )
+        _last_rew_request_ts = time.time()
+
+        # If it's not a 429, let raise_for_status handle errors
+        if resp.status_code != 429:
+            resp.raise_for_status()
+            return resp
+
+        # 429: Too Many Requests -> respect Retry-After when present
+        retry_after = resp.headers.get("Retry-After")
+        if retry_after is not None:
+            try:
+                sleep_seconds = float(retry_after)
+            except ValueError:
+                sleep_seconds = backoff
+        else:
+            sleep_seconds = backoff
+
+        logger.warning(
+            f"Got 429 from REW on {url} (attempt {attempt}/{MAX_429_RETRIES}). "
+            f"Sleeping {sleep_seconds:.1f}s before retry."
+        )
+        _sleep_blocking(sleep_seconds + random.uniform(0, 0.5))
+
+        # Exponential backoff up to a cap (e.g. 5 minutes)
+        backoff = min(backoff * 2, 300)
+
+    raise RuntimeError(
+        f"Too many 429s from REW for {url} after {MAX_429_RETRIES} retries"
+    )
 
 # ---------------------------------------------------------------------------
 # Helpers for JSON / date handling
@@ -114,8 +199,7 @@ def lookup_insights_url_via_autocomplete(address: str) -> Optional[str]:
 
     params = {"term": address}
 
-    resp = requests.get(url, params=params, headers=headers, timeout=15)
-    resp.raise_for_status()
+    resp = get_rew(url, params=params, headers=headers, timeout=15)
 
     try:
         data = resp.json()
@@ -353,12 +437,12 @@ async def process_single_property(session, prop: Property):
     logger.info(f"[Property {prop.id}] Insights URL: {insights_url}")
 
     try:
-        resp = requests.get(
+        resp = get_rew(
             insights_url,
-            headers={"User-Agent": "Mozilla/5.0 (rew-insights-seeder)"},
+            # extra headers optional; get_rew already sets UA & Accept
+            headers={"Referer": urljoin(BASE_URL, "/insights")},
             timeout=30,
         )
-        resp.raise_for_status()
     except Exception as e:
         logger.exception(
             f"[Property {prop.id}] Failed to fetch Insights page {insights_url}: {e}"
