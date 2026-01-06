@@ -172,8 +172,8 @@ async def scrape_bc_property(crawler: AsyncWebCrawler, session, url: str) -> Non
     province = "BC"
 
     # Geocode address
-    full_addr = format_full_address(street, city, province, postal)
-    geo = await geocode(full_addr)
+    # full_addr = format_full_address(street, city, province, postal)
+    # geo = await geocode(full_addr)
 
     prop = await get_or_create_property(
         session=session,
@@ -181,9 +181,9 @@ async def scrape_bc_property(crawler: AsyncWebCrawler, session, url: str) -> Non
         city=city,
         province=province,
         postal_code=postal,
-        lat=geo.lat,
-        lng=geo.lng,
-        bbox = geo.bbox.to_dict() if geo.bbox else None,
+        # lat=geo.lat,
+        # lng=geo.lng,
+        # bbox = geo.bbox.to_dict() if geo.bbox else None,
     )
     prop_id = prop.id
 

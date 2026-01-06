@@ -203,8 +203,8 @@ async def process_single_listing(crawler: AsyncWebCrawler, session, listing: Rew
 
     province = "BC"
 
-    full_addr = format_full_address(street, city, province, postal)
-    geo = await geocode(full_addr)
+    # full_addr = format_full_address(street, city, province, postal)
+    # geo = await geocode(full_addr)
 
     prop = await get_or_create_property(
         session=session,
@@ -212,9 +212,9 @@ async def process_single_listing(crawler: AsyncWebCrawler, session, listing: Rew
         city=city,
         province=province,
         postal_code=postal,
-        lat=geo.lat,
-        lng=geo.lng,
-        bbox = geo.bbox.to_dict() if geo.bbox else None,
+        # lat=geo.lat,
+        # lng=geo.lng,
+        # bbox = geo.bbox.to_dict() if geo.bbox else None,
     )
     property_id = prop.id
 
