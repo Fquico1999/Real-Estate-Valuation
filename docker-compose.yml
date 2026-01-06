@@ -22,28 +22,28 @@ services:
       retries: 10
       start_period: 5s
 
-  nominatim:
-    image: mediagis/nominatim:4.3
-    container_name: nominatim
-    restart: unless-stopped
-    # First run: import BC extract from Geofabrik
-    environment:
-      # BC-only extract to keep size down
-      PBF_URL: "https://download.geofabrik.de/north-america/canada/british-columbia-latest.osm.pbf"
-      IMPORT_WIKIPEDIA: "false"
-      USE_US_TIGER_DATA: "false"
-      POSTGRES_SHARED_BUFFERS: "512MB"
-      POSTGRES_MAINTENANCE_WORK_MEM: "256MB"
-    volumes:
-      - nominatim_data:/var/lib/postgresql/14/main
-    ports:
-      - "8080:8080"
-    healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8080/search?q=vancouver&format=json&limit=1 || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 10
-      start_period: 120s   # give it time to import on first run
+  # nominatim:
+  #   image: mediagis/nominatim:4.3
+  #   container_name: nominatim
+  #   restart: unless-stopped
+  #   # First run: import BC extract from Geofabrik
+  #   environment:
+  #     # BC-only extract to keep size down
+  #     PBF_URL: "https://download.geofabrik.de/north-america/canada/british-columbia-latest.osm.pbf"
+  #     IMPORT_WIKIPEDIA: "false"
+  #     USE_US_TIGER_DATA: "false"
+  #     POSTGRES_SHARED_BUFFERS: "512MB"
+  #     POSTGRES_MAINTENANCE_WORK_MEM: "256MB"
+  #   volumes:
+  #     - nominatim_data:/var/lib/postgresql/14/main
+  #   ports:
+  #     - "8080:8080"
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "curl -sf http://localhost:8080/search?q=vancouver&format=json&limit=1 || exit 1"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 10
+  #     start_period: 120s   # give it time to import on first run
 
   rew_scraper:
     build:
@@ -80,8 +80,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      nominatim:
-        condition: service_healthy
+      # nominatim:
+      #   condition: service_healthy
     environment:
       DATABASE_URL: postgresql+asyncpg://rewuser:rewpass@db:5432/real_estate
       GEOCODER_URL: http://nominatim:8080/search
@@ -116,5 +116,5 @@ services:
 
 volumes:
   db_data:
-  nominatim_data:
+  # nominatim_data:
 
